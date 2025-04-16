@@ -102,27 +102,26 @@ export default function SupervisorDashboard({ navigation }) {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Error response:', errorText);
+        return;
       }
       
       const data = await response.json();
+      const locations = data?.data || [];
 
-      // Create a map of surveyorId to their assigned location
+      // Create a map of surveyorId to array of their assigned locations
       const locationMap = {};
-      if (Array.isArray(data)) {
-        data.forEach(location => {
-          if (location.assignedTo) {
-            locationMap[location.assignedTo] = location;
+      locations.forEach(location => {
+        if (location?.assignedTo) {
+          if (!locationMap[location.assignedTo]) {
+            locationMap[location.assignedTo] = [];
           }
-        });
-      } else if (data.data && Array.isArray(data.data)) {
-        data.data.forEach(location => {
-          if (location.assignedTo) {
-            locationMap[location.assignedTo] = location;
-          }
-        });
-      }
+          locationMap[location.assignedTo].push(location);
+        }
+      });
+
       setAssignedLocations(locationMap);
     } catch (err) {
+      console.error('Error fetching locations:', err);
       Alert.alert('Error', `Failed to fetch locations: ${err.message}`);
     }
   };
@@ -189,7 +188,8 @@ export default function SupervisorDashboard({ navigation }) {
   };
 
   const renderSurveyor = ({ item }) => {
-    const assignedLocation = assignedLocations[item._id];
+    // Get array of locations for this surveyor
+    const surveyorLocations = assignedLocations[item._id] || [];
 
     return (
       <View style={styles.card}>
@@ -198,17 +198,35 @@ export default function SupervisorDashboard({ navigation }) {
         <Text style={styles.status}>Status: {item.status === 1 ? 'Active' : 'Inactive'}</Text>
         <Text style={styles.lastLogin}>Last Login: {new Date(item.lastLogin).toLocaleString()}</Text>
         
-        {assignedLocation ? (
-          <View style={styles.locationInfo}>
-            <Text style={styles.locationTitle}>📍 {assignedLocation.title}</Text>
-            <Text style={styles.locationDetails}>
-              Center: ({assignedLocation.centerPoint?.coordinates[1]?.toFixed(6) || 'N/A'}, 
-              {assignedLocation.centerPoint?.coordinates[0]?.toFixed(6) || 'N/A'})
-            </Text>
-            <Text style={styles.locationDetails}>Status: {assignedLocation.status}</Text>
-            <Text style={styles.locationDetails}>Radius: {assignedLocation.radius}m</Text>
-          </View>
+        {surveyorLocations.length > 0 ? (
+          <>
+            <View style={styles.locationsContainer}>
+              <Text style={styles.locationHeader}>Assigned Locations ({surveyorLocations.length}):</Text>
+              {surveyorLocations.map((location) => (
+                location && (
+                  <View key={location._id} style={styles.locationInfo}>
+                    <Text style={styles.locationTitle}>📍 {location.title}</Text>
+                    <Text style={styles.locationDetails}>
+                      Center: ({location.centerPoint?.coordinates?.[1]?.toFixed(6) || 'N/A'}, 
+                      {location.centerPoint?.coordinates?.[0]?.toFixed(6) || 'N/A'})
+                    </Text>
+                    <Text style={styles.locationDetails}>Status: {location.status || 'N/A'}</Text>
+                    <Text style={styles.locationDetails}>Radius: {location.radius || 0}m</Text>
+                  </View>
+                )
+              ))}
+            </View>
+            
+            {/* Show Assign Another Location button only when there are existing locations */}
+            <TouchableOpacity
+              style={[styles.assignBtn, { marginTop: 8 }]}
+              onPress={() => handleAssignLocation(item._id)}
+            >
+              <Text style={styles.btnText}>Assign Another Location</Text>
+            </TouchableOpacity>
+          </>
         ) : (
+          // Show single Assign Location button when no locations are assigned
           <TouchableOpacity
             style={styles.assignBtn}
             onPress={() => handleAssignLocation(item._id)}
@@ -386,11 +404,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
   },
+  locationsContainer: {
+    marginTop: 8,
+    backgroundColor: '#f5f5f5',
+    padding: 8,
+    borderRadius: 8,
+  },
+  locationHeader: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#333',
+  },
   locationInfo: {
     backgroundColor: '#E3F2FD',
     padding: 10,
     borderRadius: 8,
-    marginTop: 8,
+    marginBottom: 8,
   },
   locationTitle: {
     fontSize: 16,

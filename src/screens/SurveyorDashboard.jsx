@@ -192,6 +192,26 @@ export default function SurveyorDashboard({ navigation }) {
 
   const handleStartSurvey = async (location) => {
     try {
+      // Check if there's any active survey
+      const activeLocation = locations.find(loc => loc.status === 'ACTIVE');
+      if (activeLocation) {
+        Alert.alert(
+          'Active Survey Exists',
+          'Please complete the active survey before starting a new one.',
+          [
+            {
+              text: 'View Active Survey',
+              onPress: () => navigation.navigate('SurveyList', { location: activeLocation })
+            },
+            {
+              text: 'Cancel',
+              style: 'cancel'
+            }
+          ]
+        );
+        return;
+      }
+
       // Make PUT request to update location status
       const response = await fetch(`${LOCATION_URL}/api/locations/${location._id}`, {
         method: 'PUT',
@@ -207,6 +227,7 @@ export default function SurveyorDashboard({ navigation }) {
       if (!response.ok) {
         console.log('Failed to update location status');
         Alert.alert('Error', 'Failed to update location status');
+        return;
       }
 
       // Navigate to survey list after successful update

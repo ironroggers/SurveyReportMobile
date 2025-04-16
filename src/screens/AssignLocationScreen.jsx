@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, TextInput, StyleSheet, TouchableOpacity, Text, Alert, ScrollView } from 'react-native';
+import { View, TextInput, StyleSheet, TouchableOpacity, Text, Alert, ScrollView, FlatList } from 'react-native';
 import MapView, { Marker, Polygon } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as LocationGeocoding from 'expo-location';
@@ -14,6 +14,7 @@ export default function AssignLocationScreen({ route, navigation }) {
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [polygonPoints, setPolygonPoints] = useState([]);
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [assignedLocations, setAssignedLocations] = useState([]);
   const {currentUser} = useCurrentUser();
   const [region, setRegion] = useState({
     latitude: 17.385044,  // Default to Hyderabad
@@ -24,7 +25,20 @@ export default function AssignLocationScreen({ route, navigation }) {
 
   useEffect(() => {
     getCurrentLocation();
+    fetchAssignedLocations();
   }, []);
+
+  const fetchAssignedLocations = async () => {
+    try {
+      const response = await fetch(`${LOCATION_URL}/api/locations?assignedTo=${surveyorId}`);
+      const data = await response.json();
+      if (data.success) {
+        setAssignedLocations(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching assigned locations:', error);
+    }
+  };
 
   const getCurrentLocation = async () => {
     try {
@@ -136,10 +150,9 @@ export default function AssignLocationScreen({ route, navigation }) {
       },
       radius: parseInt(radius, 10),
       assignedTo: surveyorId,
-      status : 'INACTIVE',
-      createdBy : currentUser.id
+      status: 'INACTIVE',
+      createdBy: currentUser.id
     };
-
 
     try {
       const response = await fetch(`${LOCATION_URL}/api/locations`, {
@@ -153,14 +166,17 @@ export default function AssignLocationScreen({ route, navigation }) {
       const responseData = await response.json();
 
       if (response.ok) {
-        // Call the onLocationAssigned callback if it exists
-        if (route.params?.onLocationAssigned) {
-          route.params.onLocationAssigned();
-        }
+        // Update the local state with the new location
+        setAssignedLocations([...assignedLocations, responseData.data]);
         
-        Alert.alert('Success', 'Location assigned successfully!', [
-          { text: 'OK', onPress: () => navigation.goBack() }
-        ]);
+        // Reset form fields
+        setTitle('');
+        setPolygonPoints([]);
+        
+        Alert.alert('Success', 'Location assigned successfully!');
+        
+        // Clear the form but stay on the screen to allow more assignments
+        resetForm();
       } else {
         Alert.alert('Error', responseData.message || 'Failed to assign location');
       }
@@ -169,6 +185,28 @@ export default function AssignLocationScreen({ route, navigation }) {
       Alert.alert('Error', 'Failed to assign location. Please try again.');
     }
   };
+
+  const resetForm = () => {
+    setTitle('');
+    setPolygonPoints([]);
+    setSelectedLocation(null);
+  };
+
+  const handleFinish = () => {
+    if (route.params?.onLocationAssigned) {
+      route.params.onLocationAssigned();
+    }
+    navigation.goBack();
+  };
+
+  const renderAssignedLocation = ({ item }) => (
+    <View style={styles.assignedLocationCard}>
+      <Text style={styles.locationTitle}>{item.title}</Text>
+      <Text style={styles.locationDetails}>
+        Status: {item.status}
+      </Text>
+    </View>
+  );
 
   const resetPolygon = () => {
     setPolygonPoints([]);
@@ -204,6 +242,22 @@ export default function AssignLocationScreen({ route, navigation }) {
 
   return (
     <ScrollView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Assign Multiple Locations</Text>
+      </View>
+
+      {/* Assigned Locations List */}
+      <View style={styles.assignedLocationsContainer}>
+        <Text style={styles.sectionTitle}>Assigned Locations</Text>
+        <FlatList
+          data={assignedLocations}
+          renderItem={renderAssignedLocation}
+          keyExtractor={(item) => item._id}
+          horizontal={true}
+          style={styles.assignedLocationsList}
+        />
+      </View>
+
       <TextInput
         placeholder="Search location"
         value={searchText}
@@ -273,9 +327,18 @@ export default function AssignLocationScreen({ route, navigation }) {
         Tap on the map to draw a polygon. Connect back to the first point to complete.
       </Text>
 
-      <TouchableOpacity onPress={handleSubmit} style={styles.submitBtn}>
-        <Text style={styles.btnText}>Assign Location</Text>
-      </TouchableOpacity>
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
+          <Text style={styles.buttonText}>Assign Location</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.submitButton, styles.finishButton]} 
+          onPress={handleFinish}
+        >
+          <Text style={styles.buttonText}>Finish</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -351,5 +414,61 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     fontStyle: 'italic',
+  },
+  header: {
+    padding: 16,
+    backgroundColor: '#f5f5f5',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  assignedLocationsContainer: {
+    marginVertical: 16,
+    paddingHorizontal: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  assignedLocationsList: {
+    flexGrow: 0,
+  },
+  assignedLocationCard: {
+    backgroundColor: '#f0f0f0',
+    padding: 12,
+    marginRight: 12,
+    borderRadius: 8,
+    minWidth: 150,
+  },
+  locationTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  locationDetails: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  submitButton: {
+    flex: 1,
+    backgroundColor: '#1976D2',
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 8,
+  },
+  finishButton: {
+    backgroundColor: '#4CAF50',
+  },
+  buttonText: {
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: 'bold',
   },
 });
