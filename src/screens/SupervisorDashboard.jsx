@@ -61,7 +61,6 @@ export default function SupervisorDashboard({ navigation }) {
         longitudeDelta: 0.05,
       });
     } catch (error) {
-      console.error('Error getting location:', error);
       Alert.alert('Error', 'Unable to get your current location');
     }
   };
