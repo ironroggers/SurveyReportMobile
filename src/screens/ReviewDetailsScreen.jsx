@@ -65,7 +65,6 @@ export default function ReviewDetailsScreen({ route, navigation }) {
       if (!locationResponse.ok) {
         const errorText = await locationResponse.text();
         console.error('Location error response:', errorText);
-        throw new Error(`Failed to fetch location details: ${locationResponse.status} ${errorText}`);
       }
       
       const locationData = await locationResponse.json();
@@ -99,7 +98,6 @@ export default function ReviewDetailsScreen({ route, navigation }) {
       if (!surveysResponse.ok) {
         const errorText = await surveysResponse.text();
         console.error('Survey error response:', errorText);
-        throw new Error(`Failed to fetch surveys: ${surveysResponse.status} ${errorText}`);
       }
 
       const surveysData = await surveysResponse.json();
@@ -146,7 +144,6 @@ export default function ReviewDetailsScreen({ route, navigation }) {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Failed to update location: ${response.status} ${errorText}`);
       }
 
       Alert.alert(

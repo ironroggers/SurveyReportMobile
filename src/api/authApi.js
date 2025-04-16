@@ -1,5 +1,6 @@
 import axios from 'axios';
 import {AUTH_URL} from "../api-url";
+import {Alert} from "react-native";
 
 const API_URL = AUTH_URL;
 
@@ -12,7 +13,7 @@ const authApi = {
       });
       return response.data;
     } catch (error) {
-      throw error.response?.data || { message: 'Network error occurred' };
+      Alert.alert("Error", "Network Error")
     }
   },
   
@@ -26,7 +27,7 @@ const authApi = {
       });
       return response.data;
     } catch (error) {
-      throw error.response?.data || { message: 'Network error occurred' };
+      Alert.alert("Error", "Network Error")
     }
   },
   
@@ -39,7 +40,7 @@ const authApi = {
       });
       return response.data;
     } catch (error) {
-      throw error.response?.data || { message: 'Network error occurred' };
+      Alert.alert("Error", "Network Error")
     }
   }
 };

@@ -1,5 +1,6 @@
 import React, { createContext, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {Alert} from "react-native";
 
 export const AuthContext = createContext();
 
@@ -24,7 +25,7 @@ export const AuthProvider = ({ children }) => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
+        Alert.alert("Error", "Network Error, login failed")
       }
 
       // Store both token and user data
@@ -35,7 +36,6 @@ export const AuthProvider = ({ children }) => {
       console.log('User data stored:', data.user);
     } catch (error) {
       console.error('Login error:', error);
-      throw error;
     } finally {
       setIsLoading(false);
     }

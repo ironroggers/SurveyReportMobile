@@ -128,7 +128,6 @@ export default function SurveyFormScreen() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || `Failed to ${isUpdate ? 'update' : 'create'} survey`);
       }
 
       const result = await response.json();

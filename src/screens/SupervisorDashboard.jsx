@@ -105,7 +105,6 @@ export default function SupervisorDashboard({ navigation }) {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Error response:', errorText);
-        throw new Error(`Failed to fetch locations: ${response.status} ${errorText}`);
       }
       
       const data = await response.json();
@@ -144,7 +143,6 @@ export default function SupervisorDashboard({ navigation }) {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Error response:', errorText);
-        throw new Error(`Failed to fetch surveyors: ${response.status} ${errorText}`);
       }
       
       const data = await response.json();

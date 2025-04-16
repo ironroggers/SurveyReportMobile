@@ -50,7 +50,6 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Login error:', error);
       setError(error.message || 'Login failed');
-      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -74,7 +73,6 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Registration error:', error);
       setError(error.message || 'Registration failed');
-      throw error;
     } finally {
       setIsLoading(false);
     }
