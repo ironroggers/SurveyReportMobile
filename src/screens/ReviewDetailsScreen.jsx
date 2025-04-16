@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,11 +15,12 @@ import {
 } from 'react-native';
 import MapView, { Marker, Polygon } from 'react-native-maps';
 import ImageViewing from 'react-native-image-viewing';
+import {LOCATION_URL, SURVEY_URL} from "../api-url";
 
 const windowWidth = Dimensions.get('window').width;
 const imageSize = 100; // Fixed size for thumbnails
 
-// Add dummy attachments to surveys
+// Move dummy data outside component to prevent re-creation
 const dummySurveys = [
   {
     attachments: [
@@ -40,7 +41,7 @@ export default function ReviewDetailsScreen({ route, navigation }) {
   const { locationId, status: initialStatus, reviewComment: initialReviewComment } = route.params;
   const [location, setLocation] = useState(null);
   const [surveys, setSurveys] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
   const [mapRegion, setMapRegion] = useState(null);
@@ -49,18 +50,26 @@ export default function ReviewDetailsScreen({ route, navigation }) {
   const [actionType, setActionType] = useState(null);
   const [updating, setUpdating] = useState(false);
 
-  useEffect(() => {
-    fetchLocationAndSurveys();
-  }, [locationId]);
+  const fetchLocationAndSurveys = useCallback(async () => {
+    if (!locationId || loading) return;
 
-  const fetchLocationAndSurveys = async () => {
     try {
+      setLoading(true);
+      console.log('Fetching data for location:', locationId);
+
       // Fetch location details
-      const locationResponse = await fetch(`https://survey-service-nxvj.onrender.com/api/locations/${locationId}`);
+      console.log('Fetching location from:', `${LOCATION_URL}/api/locations/${locationId}`);
+      const locationResponse = await fetch(`${LOCATION_URL}/api/locations/${locationId}`);
+      console.log('Location response status:', locationResponse.status);
+      
       if (!locationResponse.ok) {
-        throw new Error('Failed to fetch location details');
+        const errorText = await locationResponse.text();
+        console.error('Location error response:', errorText);
+        throw new Error(`Failed to fetch location details: ${locationResponse.status} ${errorText}`);
       }
+      
       const locationData = await locationResponse.json();
+      console.log('Location data received:', locationData);
       setLocation(locationData.data);
 
       // Set map region based on location
@@ -74,25 +83,46 @@ export default function ReviewDetailsScreen({ route, navigation }) {
       }
 
       // Fetch surveys for this location
-      const surveysResponse = await fetch(`https://location-service-mig8.onrender.com/api/surveys?location=${locationId}`);
+      const surveyUrl = `${SURVEY_URL}/api/surveys?location=${locationId}`;
+      console.log('Fetching surveys from:', surveyUrl);
+      
+      const surveysResponse = await fetch(surveyUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      console.log('Surveys response status:', surveysResponse.status);
+      
       if (!surveysResponse.ok) {
-        throw new Error('Failed to fetch surveys');
+        const errorText = await surveysResponse.text();
+        console.error('Survey error response:', errorText);
+        throw new Error(`Failed to fetch surveys: ${surveysResponse.status} ${errorText}`);
       }
+
       const surveysData = await surveysResponse.json();
+      console.log('Surveys data received:', surveysData);
       setSurveys(surveysData.data || []);
     } catch (error) {
-      console.error('Error fetching data:', error);
-      Alert.alert('Error', 'Failed to load location details');
+      console.error('Error fetching data:', error.message);
+      console.error('Full error object:', error);
+      Alert.alert('Error', error.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [locationId, loading]);
 
-  const handleActionPress = (type) => {
+  useEffect(() => {
+    fetchLocationAndSurveys();
+  }, []);
+
+  const handleActionPress = useCallback((type) => {
     setActionType(type);
     setComments('');
     setIsModalVisible(true);
-  };
+  }, []);
 
   const handleConfirmAction = async () => {
     if (!comments.trim()) {
@@ -102,7 +132,7 @@ export default function ReviewDetailsScreen({ route, navigation }) {
 
     try {
       setUpdating(true);
-      const response = await fetch(`https://survey-service-nxvj.onrender.com/api/locations/${locationId}`, {
+      const response = await fetch(`${LOCATION_URL}/api/locations/${locationId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -115,7 +145,8 @@ export default function ReviewDetailsScreen({ route, navigation }) {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update location status');
+        const errorText = await response.text();
+        throw new Error(`Failed to update location: ${response.status} ${errorText}`);
       }
 
       Alert.alert(
@@ -125,7 +156,7 @@ export default function ReviewDetailsScreen({ route, navigation }) {
       );
     } catch (error) {
       console.error('Error updating location:', error);
-      Alert.alert('Error', 'Failed to update location status');
+      Alert.alert('Error', error.message);
     } finally {
       setUpdating(false);
       setIsModalVisible(false);

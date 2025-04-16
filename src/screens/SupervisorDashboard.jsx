@@ -12,6 +12,7 @@ import MapView, { Marker } from 'react-native-maps';
 import { AuthContext } from '../context/AuthContext';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import * as Location from 'expo-location';
+import {LOCATION_URL, AUTH_URL} from "../api-url";
 
 export default function SupervisorDashboard({ navigation }) {
   const { logout } = useContext(AuthContext);
@@ -96,25 +97,30 @@ export default function SupervisorDashboard({ navigation }) {
 
   const fetchAssignedLocations = async () => {
     try {
-      const response = await fetch('https://survey-service-nxvj.onrender.com/api/locations');
+      console.log('Fetching locations from:', `${LOCATION_URL}/api/locations`);
+      const response = await fetch(`${LOCATION_URL}/api/locations`);
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch locations');
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Failed to fetch locations: ${response.status} ${errorText}`);
       }
+      
       const data = await response.json();
-      console.log('Fetched locations:', data);
+      console.log('Fetched locations data:', data);
       
       // Create a map of surveyorId to their assigned location
       const locationMap = {};
       if (Array.isArray(data)) {
         data.forEach(location => {
-          console.log('Processing location:', location);
           if (location.assignedTo) {
             locationMap[location.assignedTo] = location;
           }
         });
       } else if (data.data && Array.isArray(data.data)) {
         data.data.forEach(location => {
-          console.log('Processing location:', location);
           if (location.assignedTo) {
             locationMap[location.assignedTo] = location;
           }
@@ -124,18 +130,24 @@ export default function SupervisorDashboard({ navigation }) {
       console.log('Created location map:', locationMap);
       setAssignedLocations(locationMap);
     } catch (err) {
-      console.error('Error fetching locations:', err);
+      console.error('Error fetching locations:', err.message);
+      Alert.alert('Error', `Failed to fetch locations: ${err.message}`);
     }
   };
 
   const fetchSurveyors = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/auth/users');
+      console.log('Fetching surveyors from:', `${AUTH_URL}/api/auth/users`);
+      const response = await fetch(`${AUTH_URL}/api/auth/users`);
+      console.log('Surveyors response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch surveyors');
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Failed to fetch surveyors: ${response.status} ${errorText}`);
       }
+      
       const data = await response.json();
-      // Filter users to only include SURVEYORS reporting to current supervisor
       console.log("logging the data-------------38",data.data);
       const surveyors = Array.isArray(data?.data)
         ? data?.data.filter(user =>
@@ -147,9 +159,9 @@ export default function SupervisorDashboard({ navigation }) {
       console.log("logging the surveyors length :",surveyors.length);
       setSurveyors(surveyors);
     } catch (err) {
-      console.error('Error fetching surveyors:', err);
+      console.error('Error fetching surveyors:', err.message);
       setError('Failed to load surveyors');
-      Alert.alert('Error', 'Failed to load surveyors');
+      Alert.alert('Error', `Failed to fetch surveyors: ${err.message}`);
     } finally {
       setLoading(false);
     }

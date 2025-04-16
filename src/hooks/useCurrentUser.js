@@ -6,13 +6,8 @@ export const useCurrentUser = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchCurrentUser();
-  }, []);
-
   const fetchCurrentUser = async () => {
     try {
-      // Get the stored user data from AsyncStorage
       console.log("Fetching current user...");
       const userData = await AsyncStorage.getItem('userData');
       if (userData) {
@@ -20,13 +15,31 @@ export const useCurrentUser = () => {
         console.log("Current User data:", parsedUser);
         setCurrentUser(parsedUser);
       }
-      setLoading(false);
     } catch (err) {
       console.error('Error fetching current user:', err);
       setError('Failed to fetch current user');
+    } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadUser = async () => {
+      try {
+        await fetchCurrentUser();
+      } catch (err) {
+        console.error('Error in loadUser:', err);
+      }
+    };
+
+    loadUser();
+
+    return () => {
+      mounted = false;
+    };
+  }, []); // Empty dependency array to run only once
 
   const updateCurrentUser = async (userData) => {
     try {

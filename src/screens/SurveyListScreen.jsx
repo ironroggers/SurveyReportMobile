@@ -4,6 +4,7 @@ import MapView, { Marker, Polygon } from 'react-native-maps';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import {useCurrentUser} from "../hooks/useCurrentUser";
+import {LOCATION_URL, SURVEY_URL} from "../api-url";
 
 export default function SurveyListScreen() {
   const [surveys, setSurveys] = useState([]);
@@ -30,8 +31,8 @@ export default function SurveyListScreen() {
         queryParams.append('location', location._id);
         queryParams.append('assignedTo', currentUser?.id);
       }
-      console.log("Fetch Surveys URL", `https://location-service-mig8.onrender.com/api/surveys?${queryParams.toString()}`);
-      const response = await fetch(`https://location-service-mig8.onrender.com/api/surveys?${queryParams.toString()}`);
+      console.log("Fetch Surveys URL", `${SURVEY_URL}/api/surveys?${queryParams.toString()}`);
+      const response = await fetch(`${SURVEY_URL}/api/surveys?${queryParams.toString()}`);
       const result = await response.json();
       
       if (result.success) {
@@ -176,7 +177,7 @@ export default function SurveyListScreen() {
   const handleSubmitLocation = async (location) => {
     try {
       // Make PUT request to update location status
-      const response = await fetch(`https://survey-service-nxvj.onrender.com/api/locations/${location._id}`, {
+      const response = await fetch(`${LOCATION_URL}/api/locations/${location._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

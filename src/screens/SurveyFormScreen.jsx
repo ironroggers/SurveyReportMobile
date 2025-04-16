@@ -6,6 +6,7 @@ import uuid from 'react-native-uuid';
 import MapView, { Marker, Polygon } from 'react-native-maps';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { Picker } from '@react-native-picker/picker';
+import {SURVEY_URL} from "../api-url";
 
 export default function SurveyFormScreen() {
   const [location, setLocation] = useState(null);
@@ -114,8 +115,8 @@ export default function SurveyFormScreen() {
 
       const isUpdate = route.params?.existingSurvey;
       const url = isUpdate 
-        ? `https://location-service-mig8.onrender.com/api/surveys/${route.params.existingSurvey._id}`
-        : 'https://location-service-mig8.onrender.com/api/surveys';
+        ? `${SURVEY_URL}/api/surveys/${route.params.existingSurvey._id}`
+        : `${SURVEY_URL}/api/surveys`;
 
       const response = await fetch(url, {
         method: isUpdate ? 'PUT' : 'POST',

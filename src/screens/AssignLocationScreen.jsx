@@ -4,6 +4,7 @@ import MapView, { Marker, Polygon } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as LocationGeocoding from 'expo-location';
 import {useCurrentUser} from "../hooks/useCurrentUser";
+import {LOCATION_URL} from "../api-url";
 
 export default function AssignLocationScreen({ route, navigation }) {
   const { surveyorId } = route.params;
@@ -143,7 +144,7 @@ export default function AssignLocationScreen({ route, navigation }) {
     console.log('Sending location data:', locationData);
 
     try {
-      const response = await fetch('https://survey-service-nxvj.onrender.com/api/locations', {
+      const response = await fetch(`${LOCATION_URL}/api/locations`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

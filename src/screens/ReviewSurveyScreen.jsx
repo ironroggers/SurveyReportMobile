@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,35 +7,55 @@ import {
   StyleSheet,
   SafeAreaView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import {LOCATION_URL} from "../api-url";
 
 export default function ReviewSurveyScreen({ navigation }) {
+  console.log('ReviewSurveyScreen rendered');
   const [locations, setLocations] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const { currentUser } = useCurrentUser();
+  const [loading, setLoading] = useState(false);
+  const { currentUser, loading: userLoading } = useCurrentUser();
 
-  useEffect(() => {
-    fetchLocations();
-  }, [currentUser]);
+  console.log('Current state:', { userLoading, currentUserId: currentUser?.id, loading });
 
-  const fetchLocations = async () => {
+  const fetchLocations = useCallback(async () => {
+    if (!currentUser?.id || loading) return;
+    
     try {
-      const response = await fetch(
-        `https://survey-service-nxvj.onrender.com/api/locations?createdBy=${currentUser?.id}&status=COMPLETED,APPROVED,REJECTED`
-      );
+      console.log('Starting to fetch locations');
+      setLoading(true);
+      const url = `${LOCATION_URL}/api/locations?createdBy=${currentUser.id}&status=COMPLETED,APPROVED,REJECTED`;
+      console.log('Fetching locations from:', url);
+      
+      const response = await fetch(url);
+      console.log('Response status:', response.status);
+
       if (!response.ok) {
-        throw new Error('Failed to fetch locations');
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Failed to fetch locations: ${response.status} ${errorText}`);
       }
+
       const data = await response.json();
+      console.log('Fetched locations data:', data);
       setLocations(data.data || []);
     } catch (error) {
-      console.error('Error fetching locations:', error);
+      console.error('Error fetching locations:', error.message);
+      Alert.alert('Error', `Failed to fetch locations: ${error.message}`);
     } finally {
+      console.log('Finished fetching locations');
       setLoading(false);
     }
-  };
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!userLoading && currentUser?.id) {
+      fetchLocations();
+    }
+  }, [userLoading, currentUser?.id, fetchLocations]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -76,7 +96,7 @@ export default function ReviewSurveyScreen({ navigation }) {
     </TouchableOpacity>
   );
 
-  if (loading) {
+  if (userLoading || loading) {
     return (
       <View style={styles.centerContent}>
         <ActivityIndicator size="large" color="#1976D2" />

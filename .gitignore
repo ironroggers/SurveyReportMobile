@@ -2,7 +2,8 @@
 
 # dependencies
 node_modules/
-
+eas.json
+yarn.lock
 # Expo
 .expo/
 dist/

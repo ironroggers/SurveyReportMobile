@@ -1,6 +1,7 @@
 import axios from 'axios';
+import {AUTH_URL} from "../api-url";
 
-const API_URL = 'https://auth-api-xz1q.onrender.com';
+const API_URL = AUTH_URL;
 
 const authApi = {
   login: async (email, password) => {

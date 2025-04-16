@@ -4,6 +4,7 @@ import { AuthContext } from '../context/AuthContext';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import MapView, { Marker, Polygon } from 'react-native-maps';
 import * as Location from 'expo-location';
+import {LOCATION_URL} from "../api-url";
 
 export default function SurveyorDashboard({ navigation }) {
   const { logout } = useContext(AuthContext);
@@ -87,7 +88,7 @@ export default function SurveyorDashboard({ navigation }) {
 
   const fetchAssignedLocations = async () => {
     try {
-      const response = await fetch(`https://survey-service-nxvj.onrender.com/api/locations?assignedTo=${currentUser?.id}`);
+      const response = await fetch(`${LOCATION_URL}/api/locations?assignedTo=${currentUser?.id}`);
       if (!response.ok) {
         const errorData = await response.text();
         console.log('API Error:', errorData);
@@ -184,7 +185,7 @@ export default function SurveyorDashboard({ navigation }) {
   const handleStartSurvey = async (location) => {
     try {
       // Make PUT request to update location status
-      const response = await fetch(`https://survey-service-nxvj.onrender.com/api/locations/${location._id}`, {
+      const response = await fetch(`${LOCATION_URL}/api/locations/${location._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
