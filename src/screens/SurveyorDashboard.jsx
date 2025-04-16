@@ -22,7 +22,22 @@ export default function SurveyorDashboard({ navigation }) {
     longitudeDelta: 0.05,
   });
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState('ALL');
   const isFocused = useIsFocused();
+
+  const filterOptions = [
+    { label: 'All', value: 'ALL' },
+    { label: 'Active', value: 'ACTIVE' },
+    { label: 'Inactive', value: 'INACTIVE' },
+    { label: 'Completed', value: 'COMPLETED' },
+    { label: 'Approved', value: 'APPROVED' },
+    { label: 'Rejected', value: 'REJECTED' },
+  ];
+
+  const filteredLocations = locations.filter(location => {
+    if (selectedFilter === 'ALL') return true;
+    return location.status === selectedFilter;
+  });
 
   useEffect(() => {
     fetchAssignedLocations();
@@ -313,7 +328,10 @@ export default function SurveyorDashboard({ navigation }) {
         }
       >
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Surveyor Dashboard</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Surveyor Dashboard</Text>
+            <Text style={styles.headerSubtitle}>{currentUser?.name || 'Welcome'}</Text>
+          </View>
           <TouchableOpacity
             style={styles.logoutBtn}
             onPress={handleLogout}
@@ -322,12 +340,23 @@ export default function SurveyorDashboard({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={styles.viewAttendanceBtn}
-          onPress={() => navigation.navigate('Attendance')}
-        >
-          <Text style={styles.btnText}>View Attendance</Text>
-        </TouchableOpacity>
+        <View style={styles.actionButtonsContainer}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.attendanceViewBtn]}
+            onPress={() => navigation.navigate('Attendance')}
+          >
+            <Text style={styles.actionButtonText}>View Attendance</Text>
+          </TouchableOpacity>
+
+          {!attendanceMarked && (
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.markAttendanceBtn]}
+              onPress={handleMarkAttendance}
+            >
+              <Text style={styles.actionButtonText}>Mark Attendance</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         <View style={styles.mapContainer}>
           <MapView
@@ -383,28 +412,45 @@ export default function SurveyorDashboard({ navigation }) {
             <Text style={styles.btnText}>Fit All Points</Text>
           </TouchableOpacity>
         </View>
+        <View style={styles.filterContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {filterOptions.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.filterButton,
+                  selectedFilter === option.value && styles.filterButtonActive
+                ]}
+                onPress={() => setSelectedFilter(option.value)}
+              >
+                <Text
+                  style={[
+                    styles.filterButtonText,
+                    selectedFilter === option.value && styles.filterButtonTextActive
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
         {loading ? (
           <View style={styles.centerContent}>
             <Text>Loading assigned locations...</Text>
           </View>
-        ) : locations.length === 0 ? (
+        ) : filteredLocations.length === 0 ? (
           <View style={styles.centerContent}>
-            <Text>No locations assigned yet.</Text>
+            <Text>No {selectedFilter !== 'ALL' ? selectedFilter.toLowerCase() : ''} locations found.</Text>
           </View>
         ) : (
           <FlatList
-            data={locations}
+            data={filteredLocations}
             keyExtractor={(item) => item._id}
             renderItem={renderItem}
             contentContainerStyle={{ paddingBottom: 40 }}
           />
-        )}
-
-        {!attendanceMarked && (
-          <TouchableOpacity style={styles.attendanceBtn} onPress={handleMarkAttendance}>
-            <Text style={styles.btnText}>Mark Attendance</Text>
-          </TouchableOpacity>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -422,12 +468,68 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  headerTitleContainer: {
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1976D2',
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  actionButtonText: {
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  attendanceViewBtn: {
+    backgroundColor: '#2196F3',
+  },
+  markAttendanceBtn: {
+    backgroundColor: '#4CAF50',
+  },
+  logoutBtn: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#f44336',
+  },
+  logoutBtnText: {
+    color: '#f44336',
+    textAlign: 'center',
+    fontWeight: '600',
+    fontSize: 14,
   },
   mapContainer: {
     height: 300,
@@ -494,21 +596,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
   },
-  logoutBtn: {
-    backgroundColor: '#f44336',
-    padding: 8,
-    borderRadius: 8,
-  },
-  logoutBtnText: {
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: 'bold',
-  },
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   locationBtn: {
     position: 'absolute',
     top: 10,
@@ -527,5 +614,33 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+  },
+  filterContainer: {
+    marginBottom: 16,
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  filterButtonActive: {
+    backgroundColor: '#1976D2',
+    borderColor: '#1976D2',
+  },
+  filterButtonText: {
+    color: '#666',
+    fontWeight: '500',
+  },
+  filterButtonTextActive: {
+    color: '#fff',
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

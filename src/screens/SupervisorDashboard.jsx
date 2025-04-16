@@ -250,7 +250,10 @@ export default function SupervisorDashboard({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Supervisor Dashboard</Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>Supervisor Dashboard</Text>
+          <Text style={styles.headerSubtitle}>{currentUser?.name || 'Welcome'}</Text>
+        </View>
         <TouchableOpacity
           style={styles.logoutBtn}
           onPress={handleLogout}
@@ -259,16 +262,18 @@ export default function SupervisorDashboard({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        style={styles.reviewBtn}
-        onPress={() => navigation.navigate('ReviewSurvey')}
-      >
-        <Text style={styles.reviewBtnText}>📋 Review Survey Reports</Text>
-      </TouchableOpacity>
+      <View style={styles.actionButtonsContainer}>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.reviewBtn]}
+          onPress={() => navigation.navigate('ReviewSurvey')}
+        >
+          <Text style={styles.actionButtonText}>📋 Review Surveys</Text>
+        </TouchableOpacity>
+      </View>
 
       {loading ? (
         <View style={styles.centerContent}>
-          <Text>Loading surveyors...</Text>
+          <Text style={styles.loadingText}>Loading surveyors...</Text>
         </View>
       ) : error ? (
         <View style={styles.centerContent}>
@@ -276,7 +281,16 @@ export default function SupervisorDashboard({ navigation }) {
         </View>
       ) : (
         <>
-          <Text style={styles.subHeader}>Active Supervisors: {presentSurveyors.length}</Text>
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{presentSurveyors.length}</Text>
+              <Text style={styles.statLabel}>Active Surveyors</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{surveyors.length}</Text>
+              <Text style={styles.statLabel}>Total Surveyors</Text>
+            </View>
+          </View>
 
           <View style={styles.mapContainer}>
             <MapView
@@ -345,38 +359,127 @@ export default function SupervisorDashboard({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', padding: 16 },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#fff', 
+    paddingTop: 20,
+    paddingHorizontal: 16 
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
     paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  headerTitleContainer: {
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1976D2',
+    marginBottom: 4,
   },
-  subHeader: { fontSize: 16, marginBottom: 12 },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  actionButton: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  actionButtonText: {
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  reviewBtn: {
+    backgroundColor: '#FF9800',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#E3F2FD',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1976D2',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
   mapContainer: {
     height: 300,
-    marginVertical: 16,
+    marginBottom: 20,
     borderRadius: 12,
     overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   map: {
     flex: 1,
   },
   card: {
-    backgroundColor: '#f2f2f2',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 12,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   name: { 
     fontSize: 18, 
     fontWeight: 'bold',
+    color: '#1976D2',
     marginBottom: 4,
   },
   email: {
@@ -387,38 +490,48 @@ const styles = StyleSheet.create({
   status: {
     fontSize: 14,
     marginBottom: 4,
+    color: '#333',
   },
   lastLogin: {
     fontSize: 12,
     color: '#888',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   assignBtn: {
     backgroundColor: '#1976D2',
-    padding: 10,
+    padding: 12,
     borderRadius: 8,
-    marginTop: 8,
+    marginTop: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   btnText: {
     color: '#fff',
-    fontWeight: 'bold',
+    textAlign: 'center',
+    fontWeight: '600',
     fontSize: 14,
   },
   locationsContainer: {
-    marginTop: 8,
-    backgroundColor: '#f5f5f5',
-    padding: 8,
+    marginTop: 12,
+    backgroundColor: '#F5F5F5',
+    padding: 12,
     borderRadius: 8,
   },
   locationHeader: {
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '600',
     marginBottom: 8,
     color: '#333',
   },
   locationInfo: {
     backgroundColor: '#E3F2FD',
-    padding: 10,
+    padding: 12,
     borderRadius: 8,
     marginBottom: 8,
   },
@@ -433,32 +546,28 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 2,
   },
-  reviewBtn: {
-    backgroundColor: '#FF9800',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  reviewBtnText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
   logoutBtn: {
-    backgroundColor: '#f44336',
-    padding: 8,
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#f44336',
   },
   logoutBtnText: {
-    color: '#fff',
+    color: '#f44336',
     textAlign: 'center',
-    fontWeight: 'bold',
+    fontWeight: '600',
+    fontSize: 14,
   },
   centerContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
   },
   errorText: {
     color: '#f44336',

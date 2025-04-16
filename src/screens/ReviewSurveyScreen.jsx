@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -18,7 +19,20 @@ export default function ReviewSurveyScreen({ navigation }) {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState('ALL');
   const { currentUser, loading: userLoading } = useCurrentUser();
+
+  const filterOptions = [
+    { label: 'All', value: 'ALL' },
+    { label: 'Completed', value: 'COMPLETED' },
+    { label: 'Approved', value: 'APPROVED' },
+    { label: 'Rejected', value: 'REJECTED' },
+  ];
+
+  const filteredLocations = locations.filter(location => {
+    if (selectedFilter === 'ALL') return true;
+    return location.status === selectedFilter;
+  });
 
   const fetchLocations = useCallback(async () => {
     if (!currentUser?.id || loading) return;
@@ -104,13 +118,42 @@ export default function ReviewSurveyScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.header}>Review Completed Locations</Text>
+      
+      <View style={styles.filterContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {filterOptions.map((option) => (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.filterButton,
+                selectedFilter === option.value && styles.filterButtonActive
+              ]}
+              onPress={() => setSelectedFilter(option.value)}
+            >
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  selectedFilter === option.value && styles.filterButtonTextActive
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
       {locations.length === 0 ? (
         <View style={styles.centerContent}>
           <Text style={styles.noData}>No completed locations found</Text>
         </View>
+      ) : filteredLocations.length === 0 ? (
+        <View style={styles.centerContent}>
+          <Text style={styles.noData}>No {selectedFilter.toLowerCase()} locations found</Text>
+        </View>
       ) : (
         <FlatList
-          data={locations}
+          data={filteredLocations}
           keyExtractor={(item) => item._id}
           renderItem={renderLocation}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -198,5 +241,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
+  },
+  filterContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  filterButtonActive: {
+    backgroundColor: '#1976D2',
+    borderColor: '#1976D2',
+  },
+  filterButtonText: {
+    color: '#666',
+    fontWeight: '500',
+  },
+  filterButtonTextActive: {
+    color: '#fff',
   },
 });
