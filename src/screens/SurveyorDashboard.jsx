@@ -9,7 +9,6 @@ import {LOCATION_URL} from "../api-url";
 export default function SurveyorDashboard({ navigation }) {
   const { logout } = useContext(AuthContext);
   const { currentUser } = useCurrentUser();
-  console.log("Here is the current User :",currentUser);
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [attendanceMarked, setAttendanceMarked] = useState(false);
@@ -94,7 +93,6 @@ export default function SurveyorDashboard({ navigation }) {
         console.log('API Error:', errorData);
       }
       const data = await response.json();
-      console.log("Logging the assigned location data:", data);
       
       if (!Array.isArray(data?.data)) {
         console.log('Invalid location data format:', data);
@@ -112,7 +110,6 @@ export default function SurveyorDashboard({ navigation }) {
         return isValid;
       });
 
-      console.log('Valid locations count:', validLocations);
       setLocations(validLocations);
 
       // If we have locations, update the map to show all of them

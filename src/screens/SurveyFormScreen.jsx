@@ -22,8 +22,6 @@ export default function SurveyFormScreen() {
   const assignedLocation = route.params?.existingSurvey?.location || route.params?.location._id;
   const currentLocation = route.params?.currentLocation;
   const { currentUser } = useCurrentUser();
-  console.log("Assigned Location in Survey Form", assignedLocation);
-  console.log("Current User in Survey Form", currentUser);
 
   const TERRAIN_TYPES = ['URBAN', 'RURAL', 'SUBURBAN', 'FOREST', 'MOUNTAIN'];
   const INFRASTRUCTURE_TYPES = ['POLES', 'DUCTS', 'TOWERS', 'FIBER', 'NONE'];

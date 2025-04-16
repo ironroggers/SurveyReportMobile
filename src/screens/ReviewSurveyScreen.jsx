@@ -14,24 +14,18 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import {LOCATION_URL} from "../api-url";
 
 export default function ReviewSurveyScreen({ navigation }) {
-  console.log('ReviewSurveyScreen rendered');
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(false);
   const { currentUser, loading: userLoading } = useCurrentUser();
-
-  console.log('Current state:', { userLoading, currentUserId: currentUser?.id, loading });
 
   const fetchLocations = useCallback(async () => {
     if (!currentUser?.id || loading) return;
     
     try {
-      console.log('Starting to fetch locations');
       setLoading(true);
       const url = `${LOCATION_URL}/api/locations?createdBy=${currentUser.id}&status=COMPLETED,APPROVED,REJECTED`;
-      console.log('Fetching locations from:', url);
-      
+
       const response = await fetch(url);
-      console.log('Response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -39,13 +33,10 @@ export default function ReviewSurveyScreen({ navigation }) {
       }
 
       const data = await response.json();
-      console.log('Fetched locations data:', data);
       setLocations(data.data || []);
     } catch (error) {
-      console.error('Error fetching locations:', error.message);
       Alert.alert('Error', `Failed to fetch locations: ${error.message}`);
     } finally {
-      console.log('Finished fetching locations');
       setLoading(false);
     }
   }, [currentUser?.id]);

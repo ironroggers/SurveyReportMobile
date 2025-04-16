@@ -123,7 +123,6 @@ export default function AssignLocationScreen({ route, navigation }) {
     }
 
     const centerPoint = calculateCenterPoint(polygonPoints);
-    console.log('Submitting location with surveyorId:', surveyorId);
 
     const locationData = {
       title,
@@ -141,7 +140,6 @@ export default function AssignLocationScreen({ route, navigation }) {
       createdBy : currentUser.id
     };
 
-    console.log('Sending location data:', locationData);
 
     try {
       const response = await fetch(`${LOCATION_URL}/api/locations`, {
@@ -152,14 +150,11 @@ export default function AssignLocationScreen({ route, navigation }) {
         body: JSON.stringify(locationData)
       });
 
-      console.log('Response status:', response.status);
       const responseData = await response.json();
-      console.log('Response data:', responseData);
 
       if (response.ok) {
         // Call the onLocationAssigned callback if it exists
         if (route.params?.onLocationAssigned) {
-          console.log('Calling onLocationAssigned callback');
           route.params.onLocationAssigned();
         }
         

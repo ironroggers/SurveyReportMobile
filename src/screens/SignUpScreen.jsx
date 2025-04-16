@@ -37,10 +37,8 @@ export default function SignUpScreen({ navigation }) {
     try {
       const userRole = await register(username, email, password, role);
 
-      console.log("Logging the user role:", userRole);
-      
+
       if (userRole && userRole.toUpperCase() === 'SUPERVISOR') {
-        console.log("Attempting to navigate to SupervisorDashboard");
         try {
           // Replace instead of navigate to prevent stacking
           navigation.replace('SupervisorDashboard');
@@ -52,10 +50,8 @@ export default function SignUpScreen({ navigation }) {
           );
         }
       } else if (userRole && userRole.toUpperCase() === 'SURVEYOR') {
-        console.log("Navigating to SurveyorDashboard");
-        navigation.replace('SurveyorDashboard');
+         navigation.replace('SurveyorDashboard');
       } else {
-        console.log("Unknown role received:", userRole);
         Alert.alert('Navigation Error', `Unknown role: ${userRole}`);
       }
     } catch (error) {

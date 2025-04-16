@@ -55,20 +55,16 @@ export default function ReviewDetailsScreen({ route, navigation }) {
 
     try {
       setLoading(true);
-      console.log('Fetching data for location:', locationId);
 
       // Fetch location details
-      console.log('Fetching location from:', `${LOCATION_URL}/api/locations/${locationId}`);
       const locationResponse = await fetch(`${LOCATION_URL}/api/locations/${locationId}`);
-      console.log('Location response status:', locationResponse.status);
-      
+
       if (!locationResponse.ok) {
         const errorText = await locationResponse.text();
         console.error('Location error response:', errorText);
       }
       
       const locationData = await locationResponse.json();
-      console.log('Location data received:', locationData);
       setLocation(locationData.data);
 
       // Set map region based on location
@@ -83,8 +79,7 @@ export default function ReviewDetailsScreen({ route, navigation }) {
 
       // Fetch surveys for this location
       const surveyUrl = `${SURVEY_URL}/api/surveys?location=${locationId}`;
-      console.log('Fetching surveys from:', surveyUrl);
-      
+
       const surveysResponse = await fetch(surveyUrl, {
         method: 'GET',
         headers: {
@@ -93,15 +88,13 @@ export default function ReviewDetailsScreen({ route, navigation }) {
         },
       });
       
-      console.log('Surveys response status:', surveysResponse.status);
-      
+
       if (!surveysResponse.ok) {
         const errorText = await surveysResponse.text();
         console.error('Survey error response:', errorText);
       }
 
       const surveysData = await surveysResponse.json();
-      console.log('Surveys data received:', surveysData);
       setSurveys(surveysData.data || []);
     } catch (error) {
       console.error('Error fetching data:', error.message);

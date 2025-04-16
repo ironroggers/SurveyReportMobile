@@ -35,7 +35,7 @@ export default function SupervisorDashboard({ navigation }) {
       fetchAssignedLocations();
       getCurrentLocation();
     }
-  }, [currentUser]);
+  }, [JSON.stringify(currentUser)]);
 
   const getCurrentLocation = async () => {
     try {
@@ -92,14 +92,10 @@ export default function SupervisorDashboard({ navigation }) {
 
   const mapRef = React.useRef(null);
 
-  console.log("logging the current user", currentUser);
 
   const fetchAssignedLocations = async () => {
     try {
-      console.log('Fetching locations from:', `${LOCATION_URL}/api/locations`);
       const response = await fetch(`${LOCATION_URL}/api/locations`);
-      console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers);
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -107,8 +103,7 @@ export default function SupervisorDashboard({ navigation }) {
       }
       
       const data = await response.json();
-      console.log('Fetched locations data:', data);
-      
+
       // Create a map of surveyorId to their assigned location
       const locationMap = {};
       if (Array.isArray(data)) {
@@ -124,20 +119,15 @@ export default function SupervisorDashboard({ navigation }) {
           }
         });
       }
-      
-      console.log('Created location map:', locationMap);
       setAssignedLocations(locationMap);
     } catch (err) {
-      console.error('Error fetching locations:', err.message);
       Alert.alert('Error', `Failed to fetch locations: ${err.message}`);
     }
   };
 
   const fetchSurveyors = async () => {
     try {
-      console.log('Fetching surveyors from:', `${AUTH_URL}/api/auth/users`);
       const response = await fetch(`${AUTH_URL}/api/auth/users`);
-      console.log('Surveyors response status:', response.status);
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -145,7 +135,6 @@ export default function SupervisorDashboard({ navigation }) {
       }
       
       const data = await response.json();
-      console.log("logging the data-------------38",data.data);
       const surveyors = Array.isArray(data?.data)
         ? data?.data.filter(user =>
             user?.role === "SURVEYOR" &&
@@ -153,10 +142,8 @@ export default function SupervisorDashboard({ navigation }) {
             user?.reportingTo._id.toString() === currentUser.id
           )
         : [];
-      console.log("logging the surveyors length :",surveyors.length);
       setSurveyors(surveyors);
     } catch (err) {
-      console.error('Error fetching surveyors:', err.message);
       setError('Failed to load surveyors');
       Alert.alert('Error', `Failed to fetch surveyors: ${err.message}`);
     } finally {
@@ -200,10 +187,7 @@ export default function SupervisorDashboard({ navigation }) {
   };
 
   const renderSurveyor = ({ item }) => {
-    console.log('Rendering surveyor:', item._id);
-    console.log('Assigned locations:', assignedLocations);
     const assignedLocation = assignedLocations[item._id];
-    console.log('Found assigned location:', assignedLocation);
 
     return (
       <View style={styles.card}>

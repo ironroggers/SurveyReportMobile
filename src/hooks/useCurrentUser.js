@@ -8,11 +8,9 @@ export const useCurrentUser = () => {
 
   const fetchCurrentUser = async () => {
     try {
-      console.log("Fetching current user...");
       const userData = await AsyncStorage.getItem('userData');
       if (userData) {
         const parsedUser = JSON.parse(userData);
-        console.log("Current User data:", parsedUser);
         setCurrentUser(parsedUser);
       }
     } catch (err) {

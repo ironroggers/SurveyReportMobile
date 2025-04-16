@@ -18,7 +18,6 @@ export default function SurveyListScreen() {
   const isFocused = useIsFocused();
   const location = route.params?.location;
   const {currentUser} = useCurrentUser();
-  console.log("Current User in surveyor List :",currentUser);
 
   const fetchSurveys = async () => {
     try {
@@ -31,7 +30,6 @@ export default function SurveyListScreen() {
         queryParams.append('location', location._id);
         queryParams.append('assignedTo', currentUser?.id);
       }
-      console.log("Fetch Surveys URL", `${SURVEY_URL}/api/surveys?${queryParams.toString()}`);
       const response = await fetch(`${SURVEY_URL}/api/surveys?${queryParams.toString()}`);
       const result = await response.json();
       
@@ -167,7 +165,6 @@ export default function SurveyListScreen() {
   };
 
   const handleEditSurvey = (survey) => {
-    console.log("Logging the edit Survey :",survey);
     navigation.navigate('SurveyForm', { 
       existingSurvey: survey,
       currentLocation,
@@ -189,7 +186,6 @@ export default function SurveyListScreen() {
       });
 
       if (!response.ok) {
-        console.log('Failed to update location status');
         Alert.alert('Error', 'Failed to update location status');
       }
 

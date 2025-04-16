@@ -26,10 +26,8 @@ export default function LoginScreen({ navigation }) {
 
     try {
       const userRole = await login(email, password);
-      console.log("Login UserRole", userRole);
       
       if (userRole && userRole.toUpperCase() === 'SUPERVISOR') {
-        console.log("Attempting to navigate to SupervisorDashboard");
         try {
           // Replace instead of navigate to prevent stacking
           navigation.replace('SupervisorDashboard');
@@ -41,7 +39,6 @@ export default function LoginScreen({ navigation }) {
           );
         }
       } else if (userRole && userRole.toUpperCase() === 'SURVEYOR') {
-        console.log("Attempting to navigate to SurveyorDashboard");
         try {
           // Replace instead of navigate to prevent stacking
           navigation.replace('SurveyorDashboard');
