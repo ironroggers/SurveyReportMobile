@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, SafeAreaView } from 'react-native';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, SafeAreaView, ScrollView, RefreshControl } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import MapView, { Marker, Polygon } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { useIsFocused } from '@react-navigation/native';
 import {LOCATION_URL} from "../api-url";
 
 export default function SurveyorDashboard({ navigation }) {
@@ -20,6 +21,8 @@ export default function SurveyorDashboard({ navigation }) {
     latitudeDelta: 0.05,
     longitudeDelta: 0.05,
   });
+  const [refreshing, setRefreshing] = useState(false);
+  const isFocused = useIsFocused();
 
   useEffect(() => {
     fetchAssignedLocations();
@@ -87,11 +90,18 @@ export default function SurveyorDashboard({ navigation }) {
 
   const fetchAssignedLocations = async () => {
     try {
-      const response = await fetch(`${LOCATION_URL}/api/locations?assignedTo=${currentUser?.id}`);
+      const response = await fetch(`${LOCATION_URL}/api/locations?assignedTo=${currentUser?.id}`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      
       if (!response.ok) {
         const errorData = await response.text();
         console.log('API Error:', errorData);
       }
+      
       const data = await response.json();
       
       if (!Array.isArray(data?.data)) {
@@ -147,7 +157,8 @@ export default function SurveyorDashboard({ navigation }) {
         console.log('No assigned locations found for user:', currentUser?.id);
       }
     } catch (err) {
-      console.log('Error fetching locations:', err);
+      console.error('Error fetching locations:', err);
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -206,6 +217,27 @@ export default function SurveyorDashboard({ navigation }) {
     }
   };
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        fetchAssignedLocations(),
+        getCurrentLocation()
+      ]);
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [currentUser?.id]);
+
+  // Add useEffect for screen focus
+  useEffect(() => {
+    if (isFocused) {
+      onRefresh();
+    }
+  }, [isFocused]);
+
   const renderItem = ({ item }) => {
     const isSelected = selectedLocation?._id === item._id;
 
@@ -248,100 +280,112 @@ export default function SurveyorDashboard({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Surveyor Dashboard</Text>
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={handleLogout}
-        >
-          <Text style={styles.logoutBtnText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity
-        style={styles.viewAttendanceBtn}
-        onPress={() => navigation.navigate('Attendance')}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#1976D2']}
+            tintColor="#1976D2"
+          />
+        }
       >
-        <Text style={styles.btnText}>View Attendance</Text>
-      </TouchableOpacity>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Surveyor Dashboard</Text>
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            onPress={handleLogout}
+          >
+            <Text style={styles.logoutBtnText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
 
-      <View style={styles.mapContainer}>
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          initialRegion={initialRegion}
-          onMapReady={() => {
-            console.log('Map is ready, showing', locations.length, 'locations');
-          }}
-          showsUserLocation={true}
-          showsMyLocationButton={true}
-          showsCompass={true}
-          zoomControlEnabled={true}
+        <TouchableOpacity
+          style={styles.viewAttendanceBtn}
+          onPress={() => navigation.navigate('Attendance')}
         >
-          {locations.map((location) => (
-            <React.Fragment key={location._id}>
-              <Marker
-                coordinate={{
-                  latitude: location.centerPoint.coordinates[1],
-                  longitude: location.centerPoint.coordinates[0],
-                }}
-                title={location.title}
-                onPress={() => handleLocationPress(location)}
-                pinColor={selectedLocation?._id === location._id ? "#FF0000" : "#1976D2"}
-              />
-              {location.geofence?.coordinates[0]?.length > 0 && (
-                <Polygon
-                  coordinates={location.geofence.coordinates[0].map(([lng, lat]) => ({
-                    latitude: lat,
-                    longitude: lng,
-                  }))}
-                  strokeColor={selectedLocation?._id === location._id ? "#FF0000" : "#1976D2"}
-                  fillColor={selectedLocation?._id === location._id ? "rgba(255,0,0,0.2)" : "rgba(25,118,210,0.2)"}
-                  strokeWidth={2}
+          <Text style={styles.btnText}>View Attendance</Text>
+        </TouchableOpacity>
+
+        <View style={styles.mapContainer}>
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            initialRegion={initialRegion}
+            onMapReady={() => {
+              console.log('Map is ready');
+            }}
+            showsUserLocation={true}
+            showsMyLocationButton={true}
+            showsCompass={true}
+            zoomControlEnabled={true}
+          >
+            {locations.map((location) => (
+              <React.Fragment key={location._id}>
+                <Marker
+                  coordinate={{
+                    latitude: location.centerPoint.coordinates[1],
+                    longitude: location.centerPoint.coordinates[0],
+                  }}
+                  title={location.title}
+                  onPress={() => handleLocationPress(location)}
+                  pinColor={selectedLocation?._id === location._id ? "#FF0000" : "#1976D2"}
                 />
-              )}
-            </React.Fragment>
-          ))}
-          {currentLocation && (
-            <Marker
-              coordinate={currentLocation}
-              title="Your Location"
-              pinColor="#4CAF50"
-            />
-          )}
-        </MapView>
+                {location.geofence?.coordinates[0]?.length > 0 && (
+                  <Polygon
+                    coordinates={location.geofence.coordinates[0].map(([lng, lat]) => ({
+                      latitude: lat,
+                      longitude: lng,
+                    }))}
+                    strokeColor={selectedLocation?._id === location._id ? "#FF0000" : "#1976D2"}
+                    fillColor={selectedLocation?._id === location._id ? "rgba(255,0,0,0.2)" : "rgba(25,118,210,0.2)"}
+                    strokeWidth={2}
+                  />
+                )}
+              </React.Fragment>
+            ))}
+            {currentLocation && (
+              <Marker
+                coordinate={currentLocation}
+                title="Your Location"
+                pinColor="#4CAF50"
+              />
+            )}
+          </MapView>
 
-        <TouchableOpacity style={styles.locationBtn} onPress={getCurrentLocation}>
-          <Text style={styles.btnText}>Update Location</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.locationBtn} onPress={getCurrentLocation}>
+            <Text style={styles.btnText}>Update Location</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.fitBtn} onPress={fitMapToPoints}>
-          <Text style={styles.btnText}>Fit All Points</Text>
-        </TouchableOpacity>
-      </View>
-
-      {loading ? (
-        <View style={styles.centerContent}>
-          <Text>Loading assigned locations...</Text>
+          <TouchableOpacity style={styles.fitBtn} onPress={fitMapToPoints}>
+            <Text style={styles.btnText}>Fit All Points</Text>
+          </TouchableOpacity>
         </View>
-      ) : locations.length === 0 ? (
-        <View style={styles.centerContent}>
-          <Text>No locations assigned yet.</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={locations}
-          keyExtractor={(item) => item._id}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 40 }}
-        />
-      )}
 
-      {!attendanceMarked && (
-        <TouchableOpacity style={styles.attendanceBtn} onPress={handleMarkAttendance}>
-          <Text style={styles.btnText}>Mark Attendance</Text>
-        </TouchableOpacity>
-      )}
+        {loading ? (
+          <View style={styles.centerContent}>
+            <Text>Loading assigned locations...</Text>
+          </View>
+        ) : locations.length === 0 ? (
+          <View style={styles.centerContent}>
+            <Text>No locations assigned yet.</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={locations}
+            keyExtractor={(item) => item._id}
+            renderItem={renderItem}
+            contentContainerStyle={{ paddingBottom: 40 }}
+          />
+        )}
+
+        {!attendanceMarked && (
+          <TouchableOpacity style={styles.attendanceBtn} onPress={handleMarkAttendance}>
+            <Text style={styles.btnText}>Mark Attendance</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -459,5 +503,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#1976D2',
     borderRadius: 8,
     padding: 8,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
 });

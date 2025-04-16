@@ -49,6 +49,10 @@ export default function ReviewDetailsScreen({ route, navigation }) {
   const [comments, setComments] = useState('');
   const [actionType, setActionType] = useState(null);
   const [updating, setUpdating] = useState(false);
+  const [isImageViewVisible, setIsImageViewVisible] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  const mapRef = React.useRef(null);
 
   const fetchLocationAndSurveys = useCallback(async () => {
     if (!locationId || loading) return;
@@ -58,6 +62,7 @@ export default function ReviewDetailsScreen({ route, navigation }) {
 
       // Fetch location details
       const locationResponse = await fetch(`${LOCATION_URL}/api/locations/${locationId}`);
+      console.log("locationResponse : ",locationResponse);
 
       if (!locationResponse.ok) {
         const errorText = await locationResponse.text();
@@ -164,6 +169,42 @@ export default function ReviewDetailsScreen({ route, navigation }) {
     }
   };
 
+  const fitMapToPoints = () => {
+    if (mapRef.current) {
+      const points = [];
+      
+      // Add location center point
+      points.push({
+        latitude: location.centerPoint.coordinates[1],
+        longitude: location.centerPoint.coordinates[0],
+      });
+      
+      // Add survey points
+      surveys.forEach(survey => {
+        if (survey.terrainData?.centerPoint?.coordinates) {
+          points.push({
+            latitude: survey.terrainData.centerPoint.coordinates[1],
+            longitude: survey.terrainData.centerPoint.coordinates[0]
+          });
+        }
+      });
+      
+      // Add geofence points if available
+      if (location.geofence?.coordinates[0]) {
+        location.geofence.coordinates[0].forEach(([lng, lat]) => {
+          points.push({ latitude: lat, longitude: lng });
+        });
+      }
+      
+      if (points.length > 0) {
+        mapRef.current.fitToCoordinates(points, {
+          edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+          animated: true,
+        });
+      }
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centerContent}>
@@ -185,18 +226,39 @@ export default function ReviewDetailsScreen({ route, navigation }) {
       <ScrollView style={styles.scrollContainer}>
         <View style={styles.mapContainer}>
           <MapView
+            ref={mapRef}
             style={styles.map}
             region={mapRegion}
             scrollEnabled={true}
             zoomEnabled={true}
           >
+            {/* Location center point marker */}
             <Marker
               coordinate={{
                 latitude: location.centerPoint.coordinates[1],
                 longitude: location.centerPoint.coordinates[0],
               }}
               title={location.title}
+              description="Location Center"
+              pinColor="red"
             />
+
+            {/* Survey point markers */}
+            {surveys.map((survey, index) => (
+              survey.terrainData?.centerPoint?.coordinates && (
+                <Marker
+                  key={`survey-${survey._id || index}`}
+                  coordinate={{
+                    latitude: survey.terrainData.centerPoint.coordinates[1],
+                    longitude: survey.terrainData.centerPoint.coordinates[0]
+                  }}
+                  title={survey.title}
+                  description={`Terrain: ${survey.terrainData.terrainType}`}
+                  pinColor="blue"
+                />
+              )
+            ))}
+
             {location.geofence?.coordinates[0] && (
               <Polygon
                 coordinates={location.geofence.coordinates[0].map(([lng, lat]) => ({
@@ -209,6 +271,26 @@ export default function ReviewDetailsScreen({ route, navigation }) {
               />
             )}
           </MapView>
+          
+          <TouchableOpacity style={styles.fitBtn} onPress={fitMapToPoints}>
+            <Text style={styles.btnText}>Fit All Points</Text>
+          </TouchableOpacity>
+          
+          {/* Map Legend */}
+          <View style={styles.mapLegend}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: 'red' }]} />
+              <Text style={styles.legendText}>Location Center</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: 'blue' }]} />
+              <Text style={styles.legendText}>Survey Points</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#FF0000' }]} />
+              <Text style={styles.legendText}>Location Boundary</Text>
+            </View>
+          </View>
         </View>
 
         <View style={styles.content}>
@@ -571,5 +653,48 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 16,
+  },
+  mapLegend: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 2,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  legendText: {
+    fontSize: 12,
+    color: '#333',
+  },
+  fitBtn: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    backgroundColor: '#1976D2',
+    padding: 8,
+    borderRadius: 4,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  btnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

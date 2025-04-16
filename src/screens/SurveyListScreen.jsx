@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Dimensions, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Dimensions, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import MapView, { Marker, Polygon } from 'react-native-maps';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import * as Location from 'expo-location';
@@ -13,11 +13,17 @@ export default function SurveyListScreen() {
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const navigation = useNavigation();
   const route = useRoute();
   const isFocused = useIsFocused();
   const location = route.params?.location;
   const {currentUser} = useCurrentUser();
+
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    fetchSurveys().finally(() => setRefreshing(false));
+  }, []);
 
   const fetchSurveys = async () => {
     try {
@@ -158,6 +164,26 @@ export default function SurveyListScreen() {
       return;
     }
 
+    // If there's an assigned location with a geofence, validate the point
+    if (location?.geofence?.coordinates[0]) {
+      const isInside = isPointInPolygon(
+        { 
+          lat: currentLocation.latitude, 
+          lng: currentLocation.longitude 
+        },
+        location.geofence.coordinates[0].map(([lng, lat]) => ({ lat, lng }))
+      );
+
+      if (!isInside) {
+        Alert.alert(
+          'Invalid Location',
+          'You can only add survey points within the assigned location area.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+    }
+
     navigation.navigate('SurveyForm', {
       currentLocation,
       location: route.params?.location,
@@ -173,11 +199,14 @@ export default function SurveyListScreen() {
 
   const handleSubmitLocation = async (location) => {
     try {
+      setIsSubmitting(true);
       // Make PUT request to update location status
       const response = await fetch(`${LOCATION_URL}/api/locations/${location._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         },
         body: JSON.stringify({
           ...location,
@@ -186,14 +215,33 @@ export default function SurveyListScreen() {
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error updating location:', errorText);
         Alert.alert('Error', 'Failed to update location status');
+        return;
       }
 
-      // Navigate to survey list after successful update
-      navigation.navigate('SurveyList', { location });
+      Alert.alert(
+        'Success',
+        'Location has been marked as completed',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Force immediate navigation
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'SurveyorDashboard' }],
+              });
+            }
+          }
+        ]
+      );
     } catch (error) {
       console.error('Error updating location status:', error);
       Alert.alert('Error', 'Failed to update location status');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -325,10 +373,21 @@ export default function SurveyListScreen() {
             data={surveys}
             keyExtractor={(item) => item._id}
             renderItem={renderSurveyItem}
+            contentContainerStyle={[styles.listContainer, isMapExpanded && styles.hiddenList]}
             ListEmptyComponent={
-              <Text style={styles.emptyText}>
-                No survey points available.
-              </Text>
+              !isLoading && (
+                <Text style={styles.emptyText}>
+                  No surveys found
+                </Text>
+              )
+            }
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#1976D2']}
+                tintColor="#1976D2"
+              />
             }
           />
         )}

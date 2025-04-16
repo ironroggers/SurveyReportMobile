@@ -26,6 +26,8 @@ export default function SurveyFormScreen() {
   const TERRAIN_TYPES = ['URBAN', 'RURAL', 'SUBURBAN', 'FOREST', 'MOUNTAIN'];
   const INFRASTRUCTURE_TYPES = ['POLES', 'DUCTS', 'TOWERS', 'FIBER', 'NONE'];
 
+  const mapRef = React.useRef(null);
+
   useEffect(() => {
     if (route.params?.existingSurvey) {
       const { existingSurvey } = route.params;
@@ -169,10 +171,36 @@ export default function SurveyFormScreen() {
     }
   };
 
+  const fitMapToPoints = () => {
+    if (mapRef.current) {
+      const points = [];
+      
+      // Add survey point if available
+      if (location) {
+        points.push(location);
+      }
+      
+      // Add geofence points if available
+      if (assignedLocation?.geofence?.coordinates[0]?.length > 0) {
+        assignedLocation.geofence.coordinates[0].forEach(([lng, lat]) => {
+          points.push({ latitude: lat, longitude: lng });
+        });
+      }
+      
+      if (points.length > 0) {
+        mapRef.current.fitToCoordinates(points, {
+          edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+          animated: true,
+        });
+      }
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.mapContainer}>
         <MapView
+          ref={mapRef}
           style={styles.map}
           region={mapRegion}
           onRegionChangeComplete={setMapRegion}
@@ -206,6 +234,10 @@ export default function SurveyFormScreen() {
             />
           )}
         </MapView>
+
+        <TouchableOpacity style={styles.fitBtn} onPress={fitMapToPoints}>
+          <Text style={styles.btnText}>Fit All Points</Text>
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.label}>Title</Text>
@@ -396,5 +428,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
     fontWeight: 'bold',
+  },
+  fitBtn: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    backgroundColor: '#1976D2',
+    padding: 8,
+    borderRadius: 4,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  btnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

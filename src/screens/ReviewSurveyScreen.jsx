@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -16,6 +17,7 @@ import {LOCATION_URL} from "../api-url";
 export default function ReviewSurveyScreen({ navigation }) {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const { currentUser, loading: userLoading } = useCurrentUser();
 
   const fetchLocations = useCallback(async () => {
@@ -39,6 +41,11 @@ export default function ReviewSurveyScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
+  }, [currentUser?.id]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchLocations().finally(() => setRefreshing(false));
   }, [currentUser?.id]);
 
   useEffect(() => {
@@ -108,6 +115,14 @@ export default function ReviewSurveyScreen({ navigation }) {
           renderItem={renderLocation}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#1976D2']}
+              tintColor="#1976D2"
+            />
+          }
         />
       )}
     </SafeAreaView>

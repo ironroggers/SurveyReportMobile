@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, useContext, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   SafeAreaView,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { AuthContext } from '../context/AuthContext';
@@ -22,6 +23,7 @@ export default function SupervisorDashboard({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [mapRegion, setMapRegion] = useState({
     latitude: 17.385,
     longitude: 78.4867,
@@ -218,6 +220,15 @@ export default function SupervisorDashboard({ navigation }) {
     );
   };
 
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    Promise.all([
+      fetchSurveyors(),
+      fetchAssignedLocations(),
+      getCurrentLocation()
+    ]).finally(() => setRefreshing(false));
+  }, [currentUser]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -300,6 +311,14 @@ export default function SupervisorDashboard({ navigation }) {
             keyExtractor={(item) => item._id}
             renderItem={renderSurveyor}
             contentContainerStyle={{ paddingBottom: 20 }}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#1976D2']}
+                tintColor="#1976D2"
+              />
+            }
           />
         </>
       )}

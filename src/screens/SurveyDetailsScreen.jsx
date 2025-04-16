@@ -15,8 +15,19 @@ import * as ImagePicker from 'expo-image-picker';
 export default function SurveyDetailsScreen({ route, navigation }) {
   const { survey } = route.params;
 
-  const [details, setDetails] = useState(survey.details);
-  const [attachments, setAttachments] = useState(survey.attachments);
+  const [details, setDetails] = useState(survey.details || '');
+  const [attachments, setAttachments] = useState(survey.attachments || []);
+
+  const mapRef = React.useRef(null);
+
+  const fitMapToPoints = () => {
+    if (mapRef.current && survey.location) {
+      mapRef.current.fitToCoordinates([survey.location], {
+        edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+        animated: true,
+      });
+    }
+  };
 
   const handleUploadAttachments = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -45,6 +56,7 @@ export default function SurveyDetailsScreen({ route, navigation }) {
   return (
     <ScrollView style={styles.container}>
       <MapView
+        ref={mapRef}
         style={styles.map}
         initialRegion={{
           latitude: survey.location.latitude,
@@ -81,6 +93,10 @@ export default function SurveyDetailsScreen({ route, navigation }) {
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSaveChanges}>
           <Text style={styles.saveText}>💾 Save Changes</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.fitBtn} onPress={fitMapToPoints}>
+          <Text style={styles.btnText}>Fit All Points</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -132,5 +148,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     textAlign: 'center',
+  },
+  fitBtn: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    backgroundColor: '#1976D2',
+    padding: 8,
+    borderRadius: 4,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  btnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
