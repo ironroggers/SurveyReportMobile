@@ -17,6 +17,7 @@
     "axios": "^1.8.4",
     "eas-cli": "^16.3.1",
     "expo": "~52.0.43",
+    "expo-file-system": "~18.0.12",
     "expo-image-picker": "~16.0.6",
     "expo-location": "~18.0.10",
     "expo-status-bar": "~2.0.1",

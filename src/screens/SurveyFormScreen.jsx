@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Image, Alert, ScrollView, Dimensions } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Image, Alert, ScrollView, Dimensions, Platform, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import uuid from 'react-native-uuid';
@@ -7,10 +7,11 @@ import MapView, { Marker, Polygon } from 'react-native-maps';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { Picker } from '@react-native-picker/picker';
 import {SURVEY_URL} from "../api-url";
+import * as FileSystem from 'expo-file-system';
 
 export default function SurveyFormScreen() {
   const [location, setLocation] = useState(null);
-  const [attachments, setAttachments] = useState([]);
+  const [mediaFiles, setMediaFiles] = useState([]);
   const [details, setDetails] = useState('');
   const [mapRegion, setMapRegion] = useState(null);
   const [title, setTitle] = useState('');
@@ -22,6 +23,7 @@ export default function SurveyFormScreen() {
   const assignedLocation = route.params?.existingSurvey?.location || route.params?.location._id;
   const currentLocation = route.params?.currentLocation;
   const { currentUser } = useCurrentUser();
+  const [isUploading, setIsUploading] = useState(false);
 
   const TERRAIN_TYPES = ['URBAN', 'RURAL', 'SUBURBAN', 'FOREST', 'MOUNTAIN'];
   const INFRASTRUCTURE_TYPES = ['POLES', 'DUCTS', 'TOWERS', 'FIBER', 'NONE'];
@@ -33,7 +35,7 @@ export default function SurveyFormScreen() {
       const { existingSurvey } = route.params;
       const latitude = existingSurvey?.terrainData?.centerPoint?.coordinates?.[1];
       const longitude = existingSurvey?.terrainData?.centerPoint?.coordinates?.[0];
-      setAttachments(existingSurvey.attachments || []);
+      setMediaFiles(existingSurvey.mediaFiles || []);
       setDetails(existingSurvey.description || '');
       setTitle(existingSurvey.title || '');
       setTerrainType(existingSurvey.terrainData?.terrainType || 'URBAN');
@@ -71,15 +73,139 @@ export default function SurveyFormScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsMultipleSelection: true,
+      quality: 0.7,
     });
 
     if (!result.canceled) {
-      setAttachments([...attachments, ...result.assets]);
+      const newMediaFiles = result.assets.map(asset => ({
+        url: asset.uri,
+        fileType: getFileType(asset.type || getMimeType(asset.uri)),
+        description: '',
+        uploadedAt: new Date()
+      }));
+      setMediaFiles([...mediaFiles, ...newMediaFiles]);
+    }
+  };
+
+  const getFileType = (mimeType) => {
+    if (mimeType.startsWith('image/')) return 'IMAGE';
+    if (mimeType.startsWith('video/')) return 'VIDEO';
+    return 'DOCUMENT';
+  };
+
+  const getMimeType = (fileName) => {
+    const extension = fileName.toLowerCase().split('.').pop();
+    const mimeTypes = {
+      // Images
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'bmp': 'image/bmp',
+      'heic': 'image/heic',
+      'heif': 'image/heif',
+      // Videos
+      'mp4': 'video/mp4',
+      'mov': 'video/quicktime',
+      'avi': 'video/x-msvideo',
+      'wmv': 'video/x-ms-wmv',
+      'webm': 'video/webm',
+      // Documents
+      'pdf': 'application/pdf',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xls': 'application/vnd.ms-excel',
+      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'txt': 'text/plain'
+    };
+
+    return mimeTypes[extension] || 'application/octet-stream';
+  };
+
+  const uploadFile = async (fileUri) => {
+    try {
+      // Get file info
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      console.log('File info:', fileInfo);
+      
+      if (!fileInfo.exists) {
+        throw new Error('File does not exist');
+      }
+
+      // Get the file name from the URI
+      const fileName = fileUri.split('/').pop();
+      
+      // Determine mime type based on file extension
+      const mimeType = getMimeType(fileName);
+      console.log('Uploading file:', { fileName, mimeType });
+      
+      // Create form data
+      const formData = new FormData();
+      
+      // Properly format the file object for multipart/form-data
+      formData.append('file', {
+        uri: Platform.OS === 'ios' ? fileUri.replace('file://', '') : fileUri,
+        type: mimeType,
+        name: fileName,
+      });
+
+      console.log('Sending request to:', `${SURVEY_URL}/api/upload`);
+      
+      // Upload to your server with timeout and better error handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+      try {
+        const response = await fetch(`${SURVEY_URL}/api/upload`, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            // Don't set Content-Type header, let fetch set it with the boundary
+          },
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+        
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(e => ({ message: 'Failed to parse error response' }));
+          console.error('Upload failed:', errorData);
+          throw new Error(errorData.message || `Upload failed with status ${response.status}`);
+        }
+
+        const data = await response.json().catch(e => {
+          console.error('Failed to parse response:', e);
+          throw new Error('Failed to parse server response');
+        });
+        
+        console.log('Upload successful:', data);
+
+        return {
+          url: data.data.url,
+          fileType: data.data.fileType || getFileType(mimeType),
+          description: '',
+          uploadedAt: new Date()
+        };
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          throw new Error('Upload timed out. Please check your internet connection and try again.');
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    } catch (error) {
+      console.error('Error in uploadFile:', error);
+      throw error;
     }
   };
 
   const handleSubmit = async () => {
-    if (!location || attachments.length === 0 || !details || !title || !elevation) {
+    if (!location || mediaFiles.length === 0 || !details || !title || !elevation) {
       Alert.alert('Incomplete', 'Please fill all required fields (title, location, attachments, elevation, and details).');
       return;
     }
@@ -96,6 +222,32 @@ export default function SurveyFormScreen() {
     }
 
     try {
+      setIsUploading(true);
+
+      // First, upload all media files
+      const uploadedMediaFiles = [];
+      for (const file of mediaFiles) {
+        if (!file.url.startsWith('http')) { // Only upload files that haven't been uploaded yet
+          try {
+            const uploadResult = await uploadFile(file.url);
+            uploadedMediaFiles.push({
+              ...uploadResult,
+              description: file.description || '',
+            });
+          } catch (error) {
+            console.error('Error uploading file:', file.url, error);
+            Alert.alert(
+              'Upload Error',
+              `Failed to upload file. ${error.message}`
+            );
+            setIsUploading(false);
+            return;
+          }
+        } else {
+          uploadedMediaFiles.push(file); // Keep already uploaded files as is
+        }
+      }
+
       const surveyData = {
         title: title,
         description: details,
@@ -110,8 +262,11 @@ export default function SurveyFormScreen() {
           existingInfrastructure: existingInfrastructure
         },
         assignedTo: currentUser.id,
-        assignedBy: currentUser.reportingTo
+        assignedBy: currentUser.reportingTo,
+        mediaFiles: uploadedMediaFiles
       };
+
+      console.log('Sending survey data:', surveyData);
 
       const isUpdate = route.params?.existingSurvey;
       const url = isUpdate 
@@ -121,13 +276,15 @@ export default function SurveyFormScreen() {
       const response = await fetch(url, {
         method: isUpdate ? 'PUT' : 'POST',
         headers: {
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(surveyData)
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(e => ({ message: 'Failed to parse error response' }));
+        throw new Error(errorData.message || `Failed to submit survey (${response.status})`);
       }
 
       const result = await response.json();
@@ -137,8 +294,13 @@ export default function SurveyFormScreen() {
       navigation.setParams({ newSurvey: result.data });
       
     } catch (error) {
-      console.error(`Error ${route.params?.existingSurvey ? 'updating' : 'creating'} survey:`, error);
-      Alert.alert('Error', error.message || `Failed to ${route.params?.existingSurvey ? 'update' : 'create'} survey`);
+      console.error('Error in handleSubmit:', error);
+      Alert.alert(
+        'Error',
+        `Failed to ${route.params?.existingSurvey ? 'update' : 'create'} survey: ${error.message}`
+      );
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -313,8 +475,62 @@ export default function SurveyFormScreen() {
       </TouchableOpacity>
 
       <View style={styles.attachmentsContainer}>
-        {attachments.map((file, idx) => (
-          <Image key={idx} source={{ uri: file.uri }} style={styles.attachment} />
+        {mediaFiles.map((file, idx) => (
+          <View key={idx} style={styles.mediaFileContainer}>
+            {file.fileType === 'IMAGE' ? (
+              <View style={styles.imageContainer}>
+                <Image 
+                  source={{ 
+                    uri: file.url,
+                    headers: {
+                      'Cache-Control': 'no-cache',
+                      'Pragma': 'no-cache'
+                    }
+                  }}
+                  style={styles.attachment}
+                  defaultSource={require('../assets/image-placeholder.png')}
+                  onError={(error) => {
+                    const errorMessage = error?.nativeEvent?.error || 'Failed to load image';
+                    console.error('Image loading error:', errorMessage);
+                    if (errorMessage.includes('403')) {
+                      // If the image URL has expired, we might want to refresh it
+                      Alert.alert(
+                        'Image Access Error',
+                        'The image link has expired. Please try re-uploading the image.',
+                        [
+                          {
+                            text: 'Remove Image',
+                            onPress: () => setMediaFiles(mediaFiles.filter((_, i) => i !== idx))
+                          },
+                          {
+                            text: 'Cancel',
+                            style: 'cancel'
+                          }
+                        ]
+                      );
+                    }
+                  }}
+                />
+                <View style={styles.imageOverlay}>
+                  <Text style={styles.imageStatus}>
+                    {file.url.startsWith('http') ? '✓ Uploaded' : 'Pending Upload'}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <View style={[styles.attachment, styles.fileTypeIndicator]}>
+                <Text style={styles.fileTypeText}>
+                  {file.fileType === 'VIDEO' ? '🎥' : '📄'}
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.removeButton}
+              onPress={() => setMediaFiles(mediaFiles.filter((_, i) => i !== idx))}
+            >
+              <Text style={styles.removeButtonText}>✕</Text>
+            </TouchableOpacity>
+          </View>
         ))}
       </View>
 
@@ -412,12 +628,36 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     marginBottom: 20,
   },
+  mediaFileContainer: {
+    position: 'relative',
+    marginRight: 10,
+    marginBottom: 10,
+  },
+  imageContainer: {
+    position: 'relative',
+    width: 90,
+    height: 90,
+  },
+  imageOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    padding: 4,
+  },
+  imageStatus: {
+    color: '#fff',
+    fontSize: 10,
+    textAlign: 'center',
+  },
   attachment: {
     width: 90,
     height: 90,
     marginRight: 10,
     marginBottom: 10,
     borderRadius: 6,
+    backgroundColor: '#f0f0f0',
   },
   submitBtn: {
     backgroundColor: '#388E3C',
@@ -442,9 +682,28 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
-  btnText: {
+  fileTypeIndicator: {
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fileTypeText: {
+    fontSize: 24,
+  },
+  removeButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: 'rgba(255, 0, 0, 0.8)',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeButtonText: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });

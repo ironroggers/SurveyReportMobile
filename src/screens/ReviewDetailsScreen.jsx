@@ -20,23 +20,6 @@ import {LOCATION_URL, SURVEY_URL} from "../api-url";
 const windowWidth = Dimensions.get('window').width;
 const imageSize = 100; // Fixed size for thumbnails
 
-// Move dummy data outside component to prevent re-creation
-const dummySurveys = [
-  {
-    attachments: [
-      { uri: 'https://images.unsplash.com/photo-1601933470928-c65adf64d515?w=800' },
-      { uri: 'https://images.unsplash.com/photo-1547721064-da6cfb341d50?w=800' },
-    ]
-  },
-  {
-    attachments: [
-      { uri: 'https://images.unsplash.com/photo-1581092334554-5548ff8ee3cc?w=800' },
-      { uri: 'https://images.unsplash.com/photo-1593642634367-d91a135587b5?w=800' },
-      { uri: 'https://images.unsplash.com/photo-1526045612212-70caf35c14df?w=800' },
-    ]
-  }
-];
-
 export default function ReviewDetailsScreen({ route, navigation }) {
   const { locationId, status: initialStatus, reviewComment: initialReviewComment } = route.params;
   const [location, setLocation] = useState(null);
@@ -327,29 +310,63 @@ export default function ReviewDetailsScreen({ route, navigation }) {
               
               <View style={styles.attachmentsSection}>
                 <Text style={styles.attachmentsTitle}>
-                  Attachments ({((survey.attachments || []).length + dummySurveys[index % 2].attachments.length)})
+                  Attachments ({survey.mediaFiles?.length || 0})
                 </Text>
                 <FlatList
                   horizontal
-                  data={[...(survey.attachments || []), ...dummySurveys[index % 2].attachments]}
-                  keyExtractor={(_, idx) => `attachment-${index}-${idx}`}
+                  data={survey.mediaFiles || []}
+                  keyExtractor={(item, idx) => `${survey._id}-attachment-${idx}`}
                   showsHorizontalScrollIndicator={false}
                   renderItem={({ item, index: idx }) => (
                     <TouchableOpacity
                       onPress={() => {
-                        const previousAttachmentsCount = surveys
+                        const previousMediaCount = surveys
                           .slice(0, index)
-                          .reduce((count, s) => count + ((s.attachments?.length || 0) + dummySurveys[index % 2].attachments.length), 0);
-                        setSelectedImageIndex(previousAttachmentsCount + idx);
+                          .reduce((count, s) => count + (s.mediaFiles?.length || 0), 0);
+                        setSelectedImageIndex(previousMediaCount + idx);
                         setIsImageViewerVisible(true);
                       }}
                       style={styles.attachmentItem}
                     >
-                      <Image
-                        source={{ uri: item.uri }}
-                        style={styles.thumbnail}
-                        loadingIndicatorSource={<ActivityIndicator color="#1976D2" />}
-                      />
+                      {item.fileType === 'IMAGE' ? (
+                        <View style={styles.thumbnailContainer}>
+                          <Image
+                            source={{ 
+                              uri: item.url,
+                              headers: {
+                                'Cache-Control': 'no-cache',
+                                'Pragma': 'no-cache'
+                              }
+                            }}
+                            style={styles.thumbnail}
+                            defaultSource={require('../assets/image-placeholder.png')}
+                            onError={(error) => {
+                              const errorMessage = error?.nativeEvent?.error || 'Failed to load image';
+                              console.error('Image loading error:', errorMessage);
+                              if (errorMessage.includes('403')) {
+                                Alert.alert(
+                                  'Image Access Error',
+                                  'The image link has expired. Please try refreshing the page or contact support if the issue persists.'
+                                );
+                              }
+                            }}
+                          />
+                          <View style={styles.imageOverlay}>
+                            <Text style={styles.imageStatus}>
+                              {item.uploadedAt ? new Date(item.uploadedAt).toLocaleDateString() : 'No date'}
+                            </Text>
+                          </View>
+                        </View>
+                      ) : (
+                        <View style={[styles.thumbnail, styles.fileTypeIndicator]}>
+                          <Text style={styles.fileTypeText}>
+                            {item.fileType === 'VIDEO' ? '🎥' : '📄'}
+                          </Text>
+                          <Text style={styles.fileDescription} numberOfLines={2}>
+                            {item.description || item.fileType.toLowerCase()}
+                          </Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   )}
                   contentContainerStyle={styles.attachmentsList}
@@ -425,12 +442,11 @@ export default function ReviewDetailsScreen({ route, navigation }) {
       </Modal>
 
       <ImageViewing
-        images={surveys.reduce((acc, survey, index) => {
-          if (survey.attachments) {
-            acc.push(...survey.attachments.map(attachment => ({ uri: attachment.uri })));
-          }
-          acc.push(...dummySurveys[index % 2].attachments.map(attachment => ({ uri: attachment.uri })));
-          return acc;
+        images={surveys.reduce((acc, survey) => {
+          const images = survey.mediaFiles
+            ?.filter(file => file.fileType === 'IMAGE')
+            .map(file => ({ uri: file.url })) || [];
+          return [...acc, ...images];
         }, [])}
         imageIndex={selectedImageIndex}
         visible={isImageViewerVisible}
@@ -564,10 +580,40 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
+  thumbnailContainer: {
+    position: 'relative',
+    width: imageSize,
+    height: imageSize,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    overflow: 'hidden',
+  },
+  thumbnailLoader: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginLeft: -10,
+    marginTop: -10,
+  },
   thumbnail: {
     width: imageSize,
     height: imageSize,
-    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+  },
+  fileTypeIndicator: {
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 8,
+  },
+  fileTypeText: {
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  fileDescription: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
   },
   errorText: {
     fontSize: 16,
@@ -696,5 +742,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '500',
+  },
+  imageOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    padding: 4,
+  },
+  imageStatus: {
+    color: '#fff',
+    fontSize: 10,
+    textAlign: 'center',
   },
 });

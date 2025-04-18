@@ -1,10 +1,53 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Dimensions, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Dimensions, Alert, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import MapView, { Marker, Polygon } from 'react-native-maps';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import {useCurrentUser} from "../hooks/useCurrentUser";
 import {LOCATION_URL, SURVEY_URL} from "../api-url";
+
+// New SurveyThumbnail component
+const SurveyThumbnail = React.memo(({ thumbnailImage }) => {
+  const [isImageLoading, setIsImageLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
+
+  return (
+    <View style={styles.thumbnailContainer}>
+      {thumbnailImage ? (
+        <>
+          <Image 
+            source={{ uri: thumbnailImage.url }}
+            style={[
+              styles.thumbnail,
+              isImageLoading && styles.hiddenImage
+            ]}
+            onLoadStart={() => setIsImageLoading(true)}
+            onLoad={() => setIsImageLoading(false)}
+            onError={(error) => {
+              console.error('Image loading error:', error);
+              setImageError(true);
+              setIsImageLoading(false);
+            }}
+          />
+          {isImageLoading && (
+            <View style={styles.loaderContainer}>
+              <ActivityIndicator size="small" color="#1976D2" />
+            </View>
+          )}
+          {imageError && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>!</Text>
+            </View>
+          )}
+        </>
+      ) : (
+        <View style={styles.placeholderContainer}>
+          <Text style={styles.placeholderText}>📷</Text>
+        </View>
+      )}
+    </View>
+  );
+});
 
 export default function SurveyListScreen() {
   const [surveys, setSurveys] = useState([]);
@@ -253,13 +296,23 @@ export default function SurveyListScreen() {
       ? `📍 (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`
       : '📍 Location not available';
 
+    // Get the first image from mediaFiles to display as thumbnail
+    const thumbnailImage = item?.mediaFiles?.find(file => file.fileType === 'IMAGE');
+    const mediaCount = item?.mediaFiles?.length || 0;
+
     return (
       <TouchableOpacity style={styles.card} onPress={() => handleEditSurvey(item)}>
-        <Text style={styles.title}>{item?.title || 'Untitled Survey'}</Text>
-        <Text style={styles.coordinates}>{coordinates}</Text>
-        <Text style={styles.detail}>Description: {item?.description?.slice(0, 50)}{item?.description?.length > 50 ? '...' : ''}</Text>
-        <Text style={styles.terrainType}>Terrain: {item?.terrainData?.terrainType || 'Not specified'}</Text>
-        <Text style={styles.status}>Status: {item?.status === 1 ? 'Active' : 'Inactive'}</Text>
+        <View style={styles.cardContent}>
+          <SurveyThumbnail thumbnailImage={thumbnailImage} />
+          <View style={styles.cardDetails}>
+            <Text style={styles.title}>{item?.title || 'Untitled Survey'}</Text>
+            <Text style={styles.coordinates}>{coordinates}</Text>
+            <Text style={styles.detail}>Description: {item?.description?.slice(0, 50)}{item?.description?.length > 50 ? '...' : ''}</Text>
+            <Text style={styles.terrainType}>Terrain: {item?.terrainData?.terrainType || 'Not specified'}</Text>
+            <Text style={styles.status}>Status: {item?.status === 1 ? 'Active' : 'Inactive'}</Text>
+            <Text style={styles.mediaCount}>📎 {mediaCount} attachment{mediaCount !== 1 ? 's' : ''}</Text>
+          </View>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -488,6 +541,61 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     elevation: 3,
   },
+  cardContent: {
+    flexDirection: 'row',
+  },
+  thumbnailContainer: {
+    position: 'relative',
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    overflow: 'hidden',
+    marginRight: 12,
+  },
+  thumbnail: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  hiddenImage: {
+    opacity: 0,
+  },
+  loaderContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+  },
+  errorText: {
+    fontSize: 24,
+    color: '#ff0000',
+  },
+  placeholderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+  },
+  placeholderText: {
+    fontSize: 24,
+  },
+  cardDetails: {
+    flex: 1,
+  },
   title: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -507,6 +615,11 @@ const styles = StyleSheet.create({
     color: '#1976D2',
     marginTop: 4,
     fontWeight: '500',
+  },
+  mediaCount: {
+    color: '#666',
+    marginTop: 4,
+    fontSize: 12,
   },
   loader: {
     marginTop: 20,
