@@ -6,6 +6,7 @@ import MapView, { Marker, Polygon } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useIsFocused } from '@react-navigation/native';
 import {LOCATION_URL} from "../api-url";
+import { showFeedbackForm } from '../utils/instabug';
 
 export default function SurveyorDashboard({ navigation }) {
   const { logout } = useContext(AuthContext);
@@ -355,6 +356,19 @@ export default function SurveyorDashboard({ navigation }) {
               <Text style={styles.actionButtonText}>Mark Attendance</Text>
             </TouchableOpacity>
           )}
+          
+          <TouchableOpacity
+            style={[styles.actionButton, styles.feedbackBtn]}
+            onPress={() => {
+              try {
+                showFeedbackForm();
+              } catch (error) {
+                Alert.alert('Feedback Unavailable', 'Feedback feature is not available in this version.');
+              }
+            }}
+          >
+            <Text style={styles.actionButtonText}>Send Feedback</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.mapContainer}>
@@ -641,5 +655,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  feedbackBtn: {
+    backgroundColor: '#9C27B0',
+    marginTop: 10,
   },
 });

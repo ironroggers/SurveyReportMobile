@@ -3,6 +3,13 @@ import { NavigationContainer } from '@react-navigation/native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AuthProvider } from './src/context/AuthContext';
 import { View, Text } from 'react-native';
+import { initInstabug, reportCrash } from './src/utils/instabug';
+
+// Initialize Instabug if available
+if (__DEV__) {
+  // The init function will safely handle the case when Instabug is not available
+  initInstabug('9275d57118506d1ac0a79bd77fc966ef', ['shake']);
+}
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
@@ -14,6 +21,9 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     console.log('App Error:', error);
     console.log('Error Info:', errorInfo);
+    
+    // Report error to Instabug (safely)
+    reportCrash(error);
   }
 
   render() {

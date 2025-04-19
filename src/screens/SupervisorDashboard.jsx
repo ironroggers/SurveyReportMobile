@@ -15,6 +15,7 @@ import { AuthContext } from '../context/AuthContext';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import * as Location from 'expo-location';
 import {LOCATION_URL, AUTH_URL} from "../api-url";
+import { showFeedbackForm } from '../utils/instabug';
 
 export default function SupervisorDashboard({ navigation }) {
   const { logout } = useContext(AuthContext);
@@ -292,6 +293,19 @@ export default function SupervisorDashboard({ navigation }) {
               <Text style={styles.statLabel}>Total Surveyors</Text>
             </View>
           </View>
+
+          <TouchableOpacity
+            style={styles.feedbackButton}
+            onPress={() => {
+              try {
+                showFeedbackForm();
+              } catch (error) {
+                Alert.alert('Feedback Unavailable', 'Feedback feature is not available in this version.');
+              }
+            }}
+          >
+            <Text style={styles.feedbackButtonText}>Send Feedback</Text>
+          </TouchableOpacity>
 
           <View style={styles.mapContainer}>
             <MapView
@@ -594,5 +608,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 20,
     elevation: 4,
+  },
+  feedbackButton: {
+    backgroundColor: '#9C27B0',
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  feedbackButtonText: {
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: '600',
+    fontSize: 16,
   },
 });
