@@ -4,6 +4,7 @@
 node_modules/
 eas.json
 yarn.lock
+package-lock.json
 # Expo
 .expo/
 dist/
