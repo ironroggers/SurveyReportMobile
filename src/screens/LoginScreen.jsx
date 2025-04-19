@@ -29,17 +29,25 @@ export default function LoginScreen({ navigation }) {
       
       if (!userRole) {
         console.log('No role received from login');
+        Alert.alert('Error', 'Invalid login response - no role received');
+        return;
       }
 
       const normalizedRole = userRole.toUpperCase();
       
-      // Wrap navigation in setTimeout to ensure all state updates are complete
-      setTimeout(() => {
+      // Use requestAnimationFrame instead of setTimeout for smoother transition
+      requestAnimationFrame(() => {
         try {
           if (normalizedRole === 'SUPERVISOR') {
-            navigation.replace('SupervisorDashboard');
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'SupervisorDashboard' }],
+            });
           } else if (normalizedRole === 'SURVEYOR') {
-            navigation.replace('SurveyorDashboard');
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'SurveyorDashboard' }],
+            });
           } else {
             Alert.alert('Error', `Unknown role: ${userRole}`);
           }
@@ -50,7 +58,7 @@ export default function LoginScreen({ navigation }) {
             'Could not navigate to dashboard. Please try logging in again.'
           );
         }
-      }, 100);
+      });
     } catch (error) {
       console.log('Login error:', error);
       Alert.alert(

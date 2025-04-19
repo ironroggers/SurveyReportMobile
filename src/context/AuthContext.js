@@ -44,19 +44,22 @@ export const AuthProvider = ({ children }) => {
 
       const { token, user } = response.data;
 
-      if (!token || !user) {
+      if (!token || !user || !user.role) {
         throw new Error('Invalid login response format');
       }
 
       // Store data in AsyncStorage
       try {
-        await AsyncStorage.setItem('userToken', token);
-        await AsyncStorage.setItem('userData', JSON.stringify(user));
+        await AsyncStorage.multiSet([
+          ['userToken', token],
+          ['userData', JSON.stringify(user)]
+        ]);
       } catch (storageError) {
         console.error('Storage error:', storageError);
         throw new Error('Failed to save login data');
       }
 
+      // Set state only after successful storage
       setUserToken(token);
       setUserInfo(user);
       
@@ -76,18 +79,36 @@ export const AuthProvider = ({ children }) => {
     
     try {
       const response = await authApi.register(username, email, password, role);
-      const { token, user } = response.data;
       
+      if (!response || !response.data) {
+        throw new Error('Invalid response from server');
+      }
+
+      const { token, user } = response.data;
+
+      if (!token || !user || !user.role) {
+        throw new Error('Invalid registration response format');
+      }
+
+      // Store data in AsyncStorage
+      try {
+        await AsyncStorage.multiSet([
+          ['userToken', token],
+          ['userData', JSON.stringify(user)]
+        ]);
+      } catch (storageError) {
+        console.error('Storage error:', storageError);
+        throw new Error('Failed to save registration data');
+      }
+
       setUserToken(token);
       setUserInfo(user);
-      
-      await AsyncStorage.setItem('userToken', token);
-      await AsyncStorage.setItem('userData', JSON.stringify(user));
       
       return user.role;
     } catch (error) {
       console.error('Registration error:', error);
       setError(error.message || 'Registration failed');
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -95,12 +116,16 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     setIsLoading(true);
-    setUserToken(null);
-    setUserInfo(null);
-    
-    await AsyncStorage.removeItem('userToken');
-    await AsyncStorage.removeItem('userData');
-    setIsLoading(false);
+    try {
+      await AsyncStorage.multiRemove(['userToken', 'userData']);
+      setUserToken(null);
+      setUserInfo(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+      setError(error.message || 'Logout failed');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

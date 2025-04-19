@@ -79,30 +79,44 @@ export default function SurveyListScreen() {
         queryParams.append('location', location._id);
         queryParams.append('assignedTo', currentUser?.id);
       }
+
       const response = await fetch(`${SURVEY_URL}/api/surveys?${queryParams.toString()}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log('Survey API Error:', errorText);
+        throw new Error('Failed to fetch surveys');
+      }
+
       const result = await response.json();
       
-      if (result.success) {
-        // If location is assigned, only show surveys within the geofence
-        if (location?.geofence?.coordinates[0]) {
-          const filteredSurveys = result.data.filter(survey => {
-            const surveyLat = survey.terrainData?.centerPoint?.coordinates[1];
-            const surveyLng = survey.terrainData?.centerPoint?.coordinates[0];
-            
-            if (!surveyLat || !surveyLng) return false;
-            
-            // Check if the survey point is within the geofence polygon
-            return isPointInPolygon(
-              { lat: surveyLat, lng: surveyLng },
-              location.geofence.coordinates[0].map(([lng, lat]) => ({ lat, lng }))
-            );
-          });
-          setSurveys(filteredSurveys);
-        } else {
-          setSurveys(result.data);
-        }
+      if (!result.success || !Array.isArray(result.data)) {
+        console.log('Invalid survey data format:', result);
+        throw new Error('Invalid survey data format');
+      }
+
+      // If location is assigned, only show surveys within the geofence
+      if (location?.geofence?.coordinates[0]) {
+        const filteredSurveys = result.data.filter(survey => {
+          if (!survey?.terrainData?.centerPoint?.coordinates) {
+            console.log('Invalid survey terrain data:', survey);
+            return false;
+          }
+
+          const surveyLat = survey.terrainData.centerPoint.coordinates[1];
+          const surveyLng = survey.terrainData.centerPoint.coordinates[0];
+          
+          if (!surveyLat || !surveyLng) return false;
+          
+          // Check if the survey point is within the geofence polygon
+          return isPointInPolygon(
+            { lat: surveyLat, lng: surveyLng },
+            location.geofence.coordinates[0].map(([lng, lat]) => ({ lat, lng }))
+          );
+        });
+        setSurveys(filteredSurveys);
       } else {
-        console.log('Error', 'Failed to fetch surveys');
+        setSurveys(result.data);
       }
     } catch (error) {
       console.log('Error fetching surveys:', error);
