@@ -49,7 +49,7 @@ export default function ReviewDetailsScreen({ route, navigation }) {
 
       if (!locationResponse.ok) {
         const errorText = await locationResponse.text();
-        console.error('Location error response:', errorText);
+        console.log('Location error response:', errorText);
       }
       
       const locationData = await locationResponse.json();
@@ -79,14 +79,14 @@ export default function ReviewDetailsScreen({ route, navigation }) {
 
       if (!surveysResponse.ok) {
         const errorText = await surveysResponse.text();
-        console.error('Survey error response:', errorText);
+        console.log('Survey error response:', errorText);
       }
 
       const surveysData = await surveysResponse.json();
       setSurveys(surveysData.data || []);
     } catch (error) {
-      console.error('Error fetching data:', error.message);
-      console.error('Full error object:', error);
+      console.log('Error fetching data:', error.message);
+      console.log('Full error object:', error);
       Alert.alert('Error', error.message);
     } finally {
       setLoading(false);
@@ -133,7 +133,7 @@ export default function ReviewDetailsScreen({ route, navigation }) {
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (error) {
-      console.error('Error updating location:', error);
+      console.log('Error updating location:', error);
       Alert.alert('Error', error.message);
     } finally {
       setUpdating(false);
@@ -342,7 +342,7 @@ export default function ReviewDetailsScreen({ route, navigation }) {
                             defaultSource={require('../assets/image-placeholder.png')}
                             onError={(error) => {
                               const errorMessage = error?.nativeEvent?.error || 'Failed to load image';
-                              console.error('Image loading error:', errorMessage);
+                              console.log('Image loading error:', errorMessage);
                               if (errorMessage.includes('403')) {
                                 Alert.alert(
                                   'Image Access Error',

@@ -45,7 +45,7 @@ export default function ReviewSurveyScreen({ navigation }) {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Error response:', errorText);
+        console.log('Error response:', errorText);
       }
 
       const data = await response.json();

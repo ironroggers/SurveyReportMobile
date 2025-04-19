@@ -43,7 +43,7 @@ export default function SignUpScreen({ navigation }) {
           // Replace instead of navigate to prevent stacking
           navigation.replace('SupervisorDashboard');
         } catch (navError) {
-          console.error("Navigation error:", navError);
+          console.log("Navigation error:", navError);
           Alert.alert(
             'Navigation Error', 
             'Could not navigate to SupervisorDashboard. The screen may not be registered.'
@@ -55,7 +55,7 @@ export default function SignUpScreen({ navigation }) {
         Alert.alert('Navigation Error', `Unknown role: ${userRole}`);
       }
     } catch (error) {
-      console.error("Registration error:", error);
+      console.log("Registration error:", error);
       Alert.alert('Registration Failed', error.message || 'Could not create account');
     }
   };

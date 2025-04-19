@@ -36,7 +36,7 @@ export default function AssignLocationScreen({ route, navigation }) {
         setAssignedLocations(data.data || []);
       }
     } catch (error) {
-      console.error('Error fetching assigned locations:', error);
+      console.log('Error fetching assigned locations:', error);
     }
   };
 
@@ -64,7 +64,7 @@ export default function AssignLocationScreen({ route, navigation }) {
         longitudeDelta: 0.05,
       });
     } catch (error) {
-      console.error('Error getting location:', error);
+      console.log('Error getting location:', error);
       Alert.alert('Error', 'Unable to get your current location');
     }
   };
@@ -181,7 +181,7 @@ export default function AssignLocationScreen({ route, navigation }) {
         Alert.alert('Error', responseData.message || 'Failed to assign location');
       }
     } catch (error) {
-      console.error('Error assigning location:', error);
+      console.log('Error assigning location:', error);
       Alert.alert('Error', 'Failed to assign location. Please try again.');
     }
   };

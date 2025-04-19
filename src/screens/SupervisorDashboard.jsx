@@ -101,7 +101,7 @@ export default function SupervisorDashboard({ navigation }) {
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Error response:', errorText);
+        console.log('Error response:', errorText);
         return;
       }
       
@@ -121,7 +121,7 @@ export default function SupervisorDashboard({ navigation }) {
 
       setAssignedLocations(locationMap);
     } catch (err) {
-      console.error('Error fetching locations:', err);
+      console.log('Error fetching locations:', err);
       Alert.alert('Error', `Failed to fetch locations: ${err.message}`);
     }
   };
@@ -132,7 +132,7 @@ export default function SupervisorDashboard({ navigation }) {
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Error response:', errorText);
+        console.log('Error response:', errorText);
       }
       
       const data = await response.json();

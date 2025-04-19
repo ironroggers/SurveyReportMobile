@@ -24,7 +24,7 @@ const SurveyThumbnail = React.memo(({ thumbnailImage }) => {
             onLoadStart={() => setIsImageLoading(true)}
             onLoad={() => setIsImageLoading(false)}
             onError={(error) => {
-              console.error('Image loading error:', error);
+              console.log('Image loading error:', error);
               setImageError(true);
               setIsImageLoading(false);
             }}
@@ -105,7 +105,7 @@ export default function SurveyListScreen() {
         console.log('Error', 'Failed to fetch surveys');
       }
     } catch (error) {
-      console.error('Error fetching surveys:', error);
+      console.log('Error fetching surveys:', error);
       Alert.alert('Error', 'Failed to fetch surveys');
     } finally {
       setIsLoading(false);
@@ -196,7 +196,7 @@ export default function SurveyListScreen() {
         });
       }
     } catch (error) {
-      console.error("Error getting location:", error);
+      console.log("Error getting location:", error);
       Alert.alert('Error', 'Unable to get your current location');
     }
   };
@@ -259,7 +259,7 @@ export default function SurveyListScreen() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Error updating location:', errorText);
+        console.log('Error updating location:', errorText);
         Alert.alert('Error', 'Failed to update location status');
         return;
       }
@@ -281,7 +281,7 @@ export default function SurveyListScreen() {
         ]
       );
     } catch (error) {
-      console.error('Error updating location status:', error);
+      console.log('Error updating location status:', error);
       Alert.alert('Error', 'Failed to update location status');
     } finally {
       setIsSubmitting(false);

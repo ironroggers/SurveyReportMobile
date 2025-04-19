@@ -68,7 +68,7 @@ export default function SurveyorDashboard({ navigation }) {
         longitudeDelta: 0.05,
       });
     } catch (error) {
-      console.error('Error getting location:', error);
+      console.log('Error getting location:', error);
       Alert.alert('Error', 'Unable to get your current location');
     }
   };
@@ -130,7 +130,7 @@ export default function SurveyorDashboard({ navigation }) {
           location.geofence?.coordinates?.[0]?.length > 0;
         
         if (!isValid) {
-          console.warn('Invalid location structure:', location);
+          console.log('Invalid location structure:', location);
         }
         return isValid;
       });
@@ -172,8 +172,8 @@ export default function SurveyorDashboard({ navigation }) {
         console.log('No assigned locations found for user:', currentUser?.id);
       }
     } catch (err) {
-      console.error('Error fetching locations:', err);
-      throw err;
+      console.log('Error fetching locations:', err);
+       err;
     } finally {
       setLoading(false);
     }
@@ -248,7 +248,7 @@ export default function SurveyorDashboard({ navigation }) {
       // Navigate to survey list after successful update
       navigation.navigate('SurveyList', { location });
     } catch (error) {
-      console.error('Error updating location status:', error);
+      console.log('Error updating location status:', error);
       Alert.alert('Error', 'Failed to update location status');
     }
   };
@@ -261,7 +261,7 @@ export default function SurveyorDashboard({ navigation }) {
         getCurrentLocation()
       ]);
     } catch (error) {
-      console.error('Error refreshing data:', error);
+      console.log('Error refreshing data:', error);
     } finally {
       setRefreshing(false);
     }

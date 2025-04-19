@@ -27,34 +27,36 @@ export default function LoginScreen({ navigation }) {
     try {
       const userRole = await login(email, password);
       
-      if (userRole && userRole.toUpperCase() === 'SUPERVISOR') {
-        try {
-          // Replace instead of navigate to prevent stacking
-          navigation.replace('SupervisorDashboard');
-        } catch (navError) {
-          console.error("Navigation error:", navError);
-          Alert.alert(
-            'Navigation Error',
-            'Could not navigate to SupervisorDashboard. The screen may not be registered.'
-          );
-        }
-      } else if (userRole && userRole.toUpperCase() === 'SURVEYOR') {
-        try {
-          // Replace instead of navigate to prevent stacking
-          navigation.replace('SurveyorDashboard');
-        } catch (navError) {
-          console.error("Navigation error:", navError);
-          Alert.alert(
-            'Navigation Error',
-            'Could not navigate to SurveyorDashboard. The screen may not be registered.'
-          );
-        }
-      } else {
-        console.log("Unknown role received:", userRole);
-        Alert.alert('Navigation Error', `Unknown role: ${userRole}`);
+      if (!userRole) {
+        console.log('No role received from login');
       }
+
+      const normalizedRole = userRole.toUpperCase();
+      
+      // Wrap navigation in setTimeout to ensure all state updates are complete
+      setTimeout(() => {
+        try {
+          if (normalizedRole === 'SUPERVISOR') {
+            navigation.replace('SupervisorDashboard');
+          } else if (normalizedRole === 'SURVEYOR') {
+            navigation.replace('SurveyorDashboard');
+          } else {
+            Alert.alert('Error', `Unknown role: ${userRole}`);
+          }
+        } catch (navError) {
+          console.log('Navigation error:', navError);
+          Alert.alert(
+            'Navigation Error',
+            'Could not navigate to dashboard. Please try logging in again.'
+          );
+        }
+      }, 100);
     } catch (error) {
-      Alert.alert('Login Failed', error.message || 'Invalid credentials');
+      console.log('Login error:', error);
+      Alert.alert(
+        'Login Failed',
+        error.message || 'Could not log in. Please check your credentials and try again.'
+      );
     }
   };
 

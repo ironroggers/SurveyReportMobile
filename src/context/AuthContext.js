@@ -37,18 +37,34 @@ export const AuthProvider = ({ children }) => {
     
     try {
       const response = await authApi.login(email, password);
+      
+      if (!response || !response.data) {
+        throw new Error('Invalid response from server');
+      }
+
       const { token, user } = response.data;
+
+      if (!token || !user) {
+        throw new Error('Invalid login response format');
+      }
+
+      // Store data in AsyncStorage
+      try {
+        await AsyncStorage.setItem('userToken', token);
+        await AsyncStorage.setItem('userData', JSON.stringify(user));
+      } catch (storageError) {
+        console.error('Storage error:', storageError);
+        throw new Error('Failed to save login data');
+      }
 
       setUserToken(token);
       setUserInfo(user);
-      
-      await AsyncStorage.setItem('userToken', token);
-      await AsyncStorage.setItem('userData', JSON.stringify(user));
       
       return user.role;
     } catch (error) {
       console.error('Login error:', error);
       setError(error.message || 'Login failed');
+      throw error;
     } finally {
       setIsLoading(false);
     }

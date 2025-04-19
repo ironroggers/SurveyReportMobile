@@ -130,7 +130,7 @@ export default function SurveyFormScreen() {
       console.log('File info:', fileInfo);
       
       if (!fileInfo.exists) {
-        throw new Error('File does not exist');
+        console.log('File does not exist');
       }
 
       // Get the file name from the URI
@@ -173,13 +173,13 @@ export default function SurveyFormScreen() {
         
         if (!response.ok) {
           const errorData = await response.json().catch(e => ({ message: 'Failed to parse error response' }));
-          console.error('Upload failed:', errorData);
-          throw new Error(errorData.message || `Upload failed with status ${response.status}`);
+          console.log('Upload failed:', errorData);
+          console.log(errorData.message || `Upload failed with status ${response.status}`);
         }
 
         const data = await response.json().catch(e => {
-          console.error('Failed to parse response:', e);
-          throw new Error('Failed to parse server response');
+          console.log('Failed to parse response:', e);
+          console.log('Failed to parse server response');
         });
         
         console.log('Upload successful:', data);
@@ -192,15 +192,15 @@ export default function SurveyFormScreen() {
         };
       } catch (error) {
         if (error.name === 'AbortError') {
-          throw new Error('Upload timed out. Please check your internet connection and try again.');
+          console.log('Upload timed out. Please check your internet connection and try again.');
         }
-        throw error;
+         error;
       } finally {
         clearTimeout(timeoutId);
       }
     } catch (error) {
-      console.error('Error in uploadFile:', error);
-      throw error;
+      console.log('Error in uploadFile:', error);
+       error;
     }
   };
 
@@ -235,7 +235,7 @@ export default function SurveyFormScreen() {
               description: file.description || '',
             });
           } catch (error) {
-            console.error('Error uploading file:', file.url, error);
+            console.log('Error uploading file:', file.url, error);
             Alert.alert(
               'Upload Error',
               `Failed to upload file. ${error.message}`
@@ -284,7 +284,7 @@ export default function SurveyFormScreen() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(e => ({ message: 'Failed to parse error response' }));
-        throw new Error(errorData.message || `Failed to submit survey (${response.status})`);
+        console.log(errorData.message || `Failed to submit survey (${response.status})`);
       }
 
       const result = await response.json();
@@ -294,7 +294,7 @@ export default function SurveyFormScreen() {
       navigation.setParams({ newSurvey: result.data });
       
     } catch (error) {
-      console.error('Error in handleSubmit:', error);
+      console.log('Error in handleSubmit:', error);
       Alert.alert(
         'Error',
         `Failed to ${route.params?.existingSurvey ? 'update' : 'create'} survey: ${error.message}`
@@ -491,7 +491,7 @@ export default function SurveyFormScreen() {
                   defaultSource={require('../assets/image-placeholder.png')}
                   onError={(error) => {
                     const errorMessage = error?.nativeEvent?.error || 'Failed to load image';
-                    console.error('Image loading error:', errorMessage);
+                    console.log('Image loading error:', errorMessage);
                     if (errorMessage.includes('403')) {
                       // If the image URL has expired, we might want to refresh it
                       Alert.alert(
