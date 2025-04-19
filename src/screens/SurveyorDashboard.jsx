@@ -49,7 +49,6 @@ export default function SurveyorDashboard({ navigation }) {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Please grant location permissions to use this feature');
-        return;
       }
 
       const location = await Location.getCurrentPositionAsync({
@@ -173,7 +172,7 @@ export default function SurveyorDashboard({ navigation }) {
       }
     } catch (err) {
       console.log('Error fetching locations:', err);
-       err;
+      Alert.alert('Error', 'Unable to get locations');
     } finally {
       setLoading(false);
     }
