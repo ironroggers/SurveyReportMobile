@@ -21,11 +21,25 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.ironroggers.LearnReactNative"
+      "package": "com.ironroggers.LearnReactNative",
+      "versionCode": 1,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      "expo-location",
+      "expo-image-picker",
+      "expo-file-system"
+    ],
     "extra": {
       "eas": {
         "projectId": "bbf2bd29-5804-4d06-8124-b217c2a573c3"
