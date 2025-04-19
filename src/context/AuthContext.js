@@ -1,6 +1,8 @@
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import authApi from '../api/authApi';
+import { API_URL } from '../api-url';
+import { identifyUser, clearInstabugUserAttribute } from '../utils/instabug';
 
 export const AuthContext = createContext();
 
@@ -32,41 +34,33 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    setIsLoading(true);
-    setError(null);
-    
     try {
-      const response = await authApi.login(email, password);
+      setIsLoading(true);
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
+
+      setUserToken(data.token);
+      setUserInfo(data.user);
       
-      if (!response || !response.data) {
-        throw new Error('Invalid response from server');
-      }
-
-      const { token, user } = response.data;
-
-      if (!token || !user || !user.role) {
-        throw new Error('Invalid login response format');
-      }
-
-      // Store data in AsyncStorage
-      try {
-        await AsyncStorage.multiSet([
-          ['userToken', token],
-          ['userData', JSON.stringify(user)]
-        ]);
-      } catch (storageError) {
-        console.error('Storage error:', storageError);
-        throw new Error('Failed to save login data');
-      }
-
-      // Set state only after successful storage
-      setUserToken(token);
-      setUserInfo(user);
+      // Identify user in Instabug
+      identifyUser(data.user._id, data.user.email, data.user.username);
       
-      return user.role;
+      await AsyncStorage.setItem('userToken', data.token);
+      await AsyncStorage.setItem('userInfo', JSON.stringify(data.user));
+
+      return data.user.role;
     } catch (error) {
-      console.error('Login error:', error);
-      setError(error.message || 'Login failed');
       throw error;
     } finally {
       setIsLoading(false);
@@ -74,40 +68,33 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async (username, email, password, role) => {
-    setIsLoading(true);
-    setError(null);
-    
     try {
-      const response = await authApi.register(username, email, password, role);
+      setIsLoading(true);
+      const response = await fetch(`${API_URL}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, email, password, role }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Registration failed');
+      }
+
+      setUserToken(data.token);
+      setUserInfo(data.user);
       
-      if (!response || !response.data) {
-        throw new Error('Invalid response from server');
-      }
-
-      const { token, user } = response.data;
-
-      if (!token || !user || !user.role) {
-        throw new Error('Invalid registration response format');
-      }
-
-      // Store data in AsyncStorage
-      try {
-        await AsyncStorage.multiSet([
-          ['userToken', token],
-          ['userData', JSON.stringify(user)]
-        ]);
-      } catch (storageError) {
-        console.error('Storage error:', storageError);
-        throw new Error('Failed to save registration data');
-      }
-
-      setUserToken(token);
-      setUserInfo(user);
+      // Identify user in Instabug
+      identifyUser(data.user._id, data.user.email, data.user.username);
       
-      return user.role;
+      await AsyncStorage.setItem('userToken', data.token);
+      await AsyncStorage.setItem('userInfo', JSON.stringify(data.user));
+
+      return data.user.role;
     } catch (error) {
-      console.error('Registration error:', error);
-      setError(error.message || 'Registration failed');
       throw error;
     } finally {
       setIsLoading(false);
@@ -115,14 +102,19 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    setIsLoading(true);
     try {
-      await AsyncStorage.multiRemove(['userToken', 'userData']);
+      setIsLoading(true);
+      await AsyncStorage.removeItem('userToken');
+      await AsyncStorage.removeItem('userInfo');
       setUserToken(null);
       setUserInfo(null);
+      
+      // Clear user identification in Instabug
+      clearInstabugUserAttribute('userId');
+      clearInstabugUserAttribute('email');
+      clearInstabugUserAttribute('username');
     } catch (error) {
-      console.error('Logout error:', error);
-      setError(error.message || 'Logout failed');
+      console.log('Error during logout:', error);
     } finally {
       setIsLoading(false);
     }
