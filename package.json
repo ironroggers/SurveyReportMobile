@@ -37,7 +37,8 @@
     "react-native-uuid": "^2.0.3"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "expo-build-properties": "^0.13.2"
   },
   "private": true
 }

@@ -14,7 +14,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ironroggers.LearnReactNative"
     },
     "android": {
       "adaptiveIcon": {
@@ -38,7 +39,15 @@
     "plugins": [
       "expo-location",
       "expo-image-picker",
-      "expo-file-system"
+      "expo-file-system",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ]
     ],
     "extra": {
       "eas": {
