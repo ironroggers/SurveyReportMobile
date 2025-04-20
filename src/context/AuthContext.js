@@ -60,7 +60,8 @@ export const AuthProvider = ({ children }) => {
 
       if (!response.ok) {
         console.log('Login failed response:', data);
-        throw new Error(data.message || 'Login failed');
+        setError(data.message || 'Login failed');
+        return null;
       }
 
       console.log('Full login response:', data);
@@ -68,7 +69,8 @@ export const AuthProvider = ({ children }) => {
       // Check if the response contains a token
       if (!data.data.token) {
         console.log('Warning: Token not found in login response');
-        throw new Error('Invalid response format: No authentication token received');
+        setError('Invalid response format: No authentication token received');
+        return null;
       }
 
       // Store the token
@@ -99,7 +101,9 @@ export const AuthProvider = ({ children }) => {
       // Return role if it exists, or a default value
       return data.data.user?.role || (data.data.role || 'unknown');
     } catch (error) {
-      throw error;
+      console.log('Login error:', error);
+      setError(error.message || 'Network error during login');
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -120,7 +124,8 @@ export const AuthProvider = ({ children }) => {
 
       if (!response.ok) {
         console.log('Registration failed response:', data);
-        throw new Error(data.message || 'Registration failed');
+        setError(data.message || 'Registration failed');
+        return null;
       }
 
       console.log('Full registration response:', data);
@@ -128,7 +133,8 @@ export const AuthProvider = ({ children }) => {
       // Check if the response contains a token
       if (!data.data?.token) {
         console.log('Warning: Token not found in registration response');
-        throw new Error('Invalid response format: No authentication token received');
+        setError('Invalid response format: No authentication token received');
+        return null;
       }
 
       // Store the token
@@ -160,7 +166,9 @@ export const AuthProvider = ({ children }) => {
       // Return role if it exists, or a default value
       return data.data?.user?.role || (data.data?.role || role || 'unknown');
     } catch (error) {
-      throw error;
+      console.log('Registration error:', error);
+      setError(error.message || 'Network error during registration');
+      return null;
     } finally {
       setIsLoading(false);
     }

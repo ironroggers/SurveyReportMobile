@@ -104,6 +104,8 @@ export default function SupervisorDashboard({ navigation }) {
       if (!response.ok) {
         const errorText = await response.text();
         console.log('Error response:', errorText);
+        Alert.alert('Error', 'Failed to fetch locations');
+        setAssignedLocations({});
         return;
       }
       
@@ -125,6 +127,7 @@ export default function SupervisorDashboard({ navigation }) {
     } catch (err) {
       console.log('Error fetching locations:', err);
       Alert.alert('Error', `Failed to fetch locations: ${err.message}`);
+      setAssignedLocations({});
     }
   };
 
@@ -135,20 +138,33 @@ export default function SupervisorDashboard({ navigation }) {
       if (!response.ok) {
         const errorText = await response.text();
         console.log('Error response:', errorText);
+        Alert.alert('Error', 'Failed to fetch surveyors');
+        setSurveyors([]);
+        setLoading(false);
+        return;
       }
       
       const data = await response.json();
-      const surveyors = Array.isArray(data?.data)
-        ? data?.data.filter(user =>
-            user?.role === "SURVEYOR" &&
-            user?.reportingTo &&
-            user?.reportingTo._id.toString() === currentUser.id
-          )
-        : [];
+      if (!Array.isArray(data?.data)) {
+        console.log('Invalid surveyors data format:', data);
+        Alert.alert('Error', 'Invalid response format when fetching surveyors');
+        setSurveyors([]);
+        setLoading(false);
+        return;
+      }
+      
+      const surveyors = data.data.filter(user =>
+        user?.role === "SURVEYOR" &&
+        user?.reportingTo &&
+        user?.reportingTo._id.toString() === currentUser.id
+      );
+      
       setSurveyors(surveyors);
     } catch (err) {
       setError('Failed to load surveyors');
+      console.log('Error fetching surveyors:', err);
       Alert.alert('Error', `Failed to fetch surveyors: ${err.message}`);
+      setSurveyors([]);
     } finally {
       setLoading(false);
     }

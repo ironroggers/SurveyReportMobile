@@ -36,6 +36,13 @@ export default function LoginScreen({ navigation }) {
       const userRole = await login(email, password);
       console.log("UserRole after login:", userRole);
       
+      // If login returns null, there was an error
+      if (userRole === null) {
+        let errorMessage = error?.message || 'Could not log in. Please check your credentials and try again.';
+        Alert.alert('Login Failed', errorMessage);
+        return;
+      }
+      
       if (!userRole || userRole === 'unknown') {
         console.log('No role or unknown role received from login:', userRole);
         // Still allow login but with a warning
@@ -65,11 +72,6 @@ export default function LoginScreen({ navigation }) {
       
       if (error.message) {
         errorMessage = error.message;
-        
-        // Add more helpful information for specific errors
-        if (error.message.includes('No authentication token')) {
-          errorMessage += '\n\nThe server response format was unexpected. Please contact support.';
-        }
       }
       
       Alert.alert(

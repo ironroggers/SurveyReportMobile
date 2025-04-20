@@ -115,12 +115,20 @@ export default function SurveyorDashboard({ navigation }) {
       if (!response.ok) {
         const errorData = await response.text();
         console.log('API Error:', errorData);
+        Alert.alert('Error', 'Failed to fetch assigned locations');
+        setLocations([]);
+        setLoading(false);
+        return;
       }
       
       const data = await response.json();
       
       if (!Array.isArray(data?.data)) {
         console.log('Invalid location data format:', data);
+        Alert.alert('Error', 'Invalid data format received from server');
+        setLocations([]);
+        setLoading(false);
+        return;
       }
 
       // Validate location structure
@@ -174,6 +182,7 @@ export default function SurveyorDashboard({ navigation }) {
     } catch (err) {
       console.log('Error fetching locations:', err);
       Alert.alert('Error', 'Unable to get locations');
+      setLocations([]);
     } finally {
       setLoading(false);
     }

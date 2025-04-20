@@ -36,7 +36,12 @@ export default function SignUpScreen({ navigation }) {
 
     try {
       const userRole = await register(username, email, password, role);
-
+      
+      // Handle case when registration returns null (error)
+      if (userRole === null) {
+        Alert.alert('Registration Failed', 'Could not register account. Please try again later.');
+        return;
+      }
 
       if (userRole && userRole.toUpperCase() === 'SUPERVISOR') {
         try {
@@ -50,9 +55,17 @@ export default function SignUpScreen({ navigation }) {
           );
         }
       } else if (userRole && userRole.toUpperCase() === 'SURVEYOR') {
-         navigation.replace('SurveyorDashboard');
+        try {
+          navigation.replace('SurveyorDashboard');
+        } catch (navError) {
+          console.log("Navigation error:", navError);
+          Alert.alert(
+            'Navigation Error', 
+            'Could not navigate to SurveyorDashboard. The screen may not be registered.'
+          );
+        }
       } else {
-        Alert.alert('Navigation Error', `Unknown role: ${userRole}`);
+        Alert.alert('Registration Error', `Unknown role received: ${userRole || 'none'}`);
       }
     } catch (error) {
       console.log("Registration error:", error);

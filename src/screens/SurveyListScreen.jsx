@@ -85,14 +85,18 @@ export default function SurveyListScreen() {
       if (!response.ok) {
         const errorText = await response.text();
         console.log('Survey API Error:', errorText);
-        throw new Error('Failed to fetch surveys');
+        Alert.alert('Error', 'Failed to fetch surveys');
+        setIsLoading(false);
+        return;
       }
 
       const result = await response.json();
       
       if (!result.success || !Array.isArray(result.data)) {
         console.log('Invalid survey data format:', result);
-        throw new Error('Invalid survey data format');
+        Alert.alert('Error', 'Invalid survey data format received');
+        setIsLoading(false);
+        return;
       }
 
       // If location is assigned, only show surveys within the geofence
