@@ -4,22 +4,50 @@ let isInstabugAvailable = false;
 
 // Try to import Instabug, but don't crash if it's not available
 try {
-  Instabug = require('instabug-reactnative').default;
-  isInstabugAvailable = !!Instabug;
-  console.log('Instabug is available:', isInstabugAvailable);
+  const InstabugModule = require('instabug-reactnative');
+  Instabug = InstabugModule.default;
+  isInstabugAvailable = !!Instabug && !!Instabug.isInitialized;
+  console.log('Instabug availability check:', isInstabugAvailable ? 'Available' : 'Not available');
 } catch (error) {
   console.log('Instabug is not available:', error.message);
   isInstabugAvailable = false;
 }
 
+// Create dummy implementations for when Instabug is not available
+const dummyInstabug = {
+  start: () => {},
+  setEnabled: () => {},
+  setPrimaryColor: () => {},
+  identifyUser: () => {},
+  logUserEvent: () => {},
+  addFileAttachment: () => Promise.resolve(false),
+  startScreenRecording: () => {},
+  stopScreenRecording: () => {},
+  show: () => {},
+  setBugReportingEnabled: () => {},
+  setCommentMinimumCharacterCount: () => {},
+  setShakingThresholdForAndroid: () => {},
+  setFloatingButtonEdge: () => {},
+  setFloatingButtonOffset: () => {},
+  setUserAttribute: () => {},
+  removeUserAttribute: () => {},
+  reportJSException: () => {}
+};
+
+// Use the real Instabug or our dummy implementation
+const instabugInstance = isInstabugAvailable ? Instabug : dummyInstabug;
+
 // Initialize function to be called from App.js
 export const initInstabug = (appToken, invocationEvents) => {
-  if (!isInstabugAvailable) return;
+  if (!isInstabugAvailable) {
+    console.log('Skipping Instabug initialization - module not available');
+    return;
+  }
   
   try {
-    Instabug.start(appToken, invocationEvents);
-    Instabug.setEnabled(true);
-    Instabug.setPrimaryColor('#1976D2');
+    instabugInstance.start(appToken, invocationEvents);
+    instabugInstance.setEnabled(true);
+    instabugInstance.setPrimaryColor('#1976D2');
     console.log('Instabug initialized successfully');
   } catch (error) {
     console.log('Error initializing Instabug:', error);
@@ -29,7 +57,7 @@ export const initInstabug = (appToken, invocationEvents) => {
 export const identifyUser = (userId, email, name) => {
   if (!isInstabugAvailable) return;
   try {
-    Instabug.identifyUser(name, email, userId);
+    instabugInstance.identifyUser(name, email, userId);
   } catch (error) {
     console.log('Error identifying user in Instabug:', error);
   }
@@ -38,7 +66,7 @@ export const identifyUser = (userId, email, name) => {
 export const logUserEvent = (eventName) => {
   if (!isInstabugAvailable) return;
   try {
-    Instabug.logUserEvent(eventName);
+    instabugInstance.logUserEvent(eventName);
   } catch (error) {
     console.log('Error logging user event in Instabug:', error);
   }
@@ -47,7 +75,7 @@ export const logUserEvent = (eventName) => {
 export const addFileAttachment = async (fileUri) => {
   if (!isInstabugAvailable) return false;
   try {
-    await Instabug.addFileAttachment(fileUri);
+    await instabugInstance.addFileAttachment(fileUri);
     return true;
   } catch (error) {
     console.error('Error adding file attachment to Instabug:', error);
@@ -56,11 +84,13 @@ export const addFileAttachment = async (fileUri) => {
 };
 
 export const startScreenRecording = () => {
-  Instabug.startScreenRecording();
+  if (!isInstabugAvailable) return;
+  instabugInstance.startScreenRecording();
 };
 
 export const stopScreenRecording = () => {
-  Instabug.stopScreenRecording();
+  if (!isInstabugAvailable) return;
+  instabugInstance.stopScreenRecording();
 };
 
 export const showFeedbackForm = () => {
@@ -69,28 +99,30 @@ export const showFeedbackForm = () => {
     return;
   }
   try {
-    Instabug.show();
+    instabugInstance.show();
   } catch (error) {
     console.log('Error showing Instabug feedback form:', error);
   }
 };
 
 export const setBugReportingOptions = () => {
-  Instabug.setBugReportingEnabled(true);
-  Instabug.setCommentMinimumCharacterCount(10);
-  Instabug.setShakingThresholdForAndroid(0.7); // Adjust sensitivity
-  Instabug.setFloatingButtonEdge(Instabug.floatingButtonEdge.right);
-  Instabug.setFloatingButtonOffset(50, 50);
+  if (!isInstabugAvailable) return;
+  instabugInstance.setBugReportingEnabled(true);
+  instabugInstance.setCommentMinimumCharacterCount(10);
+  instabugInstance.setShakingThresholdForAndroid(0.7); // Adjust sensitivity
+  instabugInstance.setFloatingButtonEdge(instabugInstance.floatingButtonEdge?.right || 'right');
+  instabugInstance.setFloatingButtonOffset(50, 50);
 };
 
 export const setInstabugUserAttribute = (key, value) => {
-  Instabug.setUserAttribute(key, value);
+  if (!isInstabugAvailable) return;
+  instabugInstance.setUserAttribute(key, value);
 };
 
 export const clearInstabugUserAttribute = (key) => {
   if (!isInstabugAvailable) return;
   try {
-    Instabug.removeUserAttribute(key);
+    instabugInstance.removeUserAttribute(key);
   } catch (error) {
     console.log('Error clearing Instabug user attribute:', error);
   }
@@ -99,7 +131,7 @@ export const clearInstabugUserAttribute = (key) => {
 export const reportCrash = (error) => {
   if (!isInstabugAvailable) return;
   try {
-    Instabug.reportJSException(error);
+    instabugInstance.reportJSException(error);
   } catch (err) {
     console.log('Error reporting crash to Instabug:', err);
   }

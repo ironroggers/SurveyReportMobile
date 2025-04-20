@@ -34,11 +34,17 @@ export default function SupervisorDashboard({ navigation }) {
   });
 
   useEffect(() => {
-    if (currentUser) {
-      loadInitialData();
-    } else if (!userLoading) {
-      // If we're not loading user data but don't have a user, show error
-      setError('User data not available. Please log in again.');
+    try {
+      if (currentUser) {
+        loadInitialData();
+      } else if (!userLoading) {
+        // If we're not loading user data but don't have a user, show error
+        setError('User data not available. Please log in again.');
+        setLoading(false);
+      }
+    } catch (err) {
+      console.log('Error in useEffect:', err);
+      setError('An error occurred while initializing the dashboard.');
       setLoading(false);
     }
   }, [currentUser, userLoading]);
@@ -46,11 +52,24 @@ export default function SupervisorDashboard({ navigation }) {
   const loadInitialData = async () => {
     setLoading(true);
     try {
-      await Promise.all([
-        fetchSurveyors(),
-        fetchAssignedLocations(),
-        getCurrentLocation()
-      ]);
+      // Run each function separately to prevent one failure from stopping others
+      try {
+        await fetchSurveyors();
+      } catch (error) {
+        console.log('Error fetching surveyors:', error);
+      }
+      
+      try {
+        await fetchAssignedLocations();
+      } catch (error) {
+        console.log('Error fetching locations:', error);
+      }
+      
+      try {
+        await getCurrentLocation();
+      } catch (error) {
+        console.log('Error getting current location:', error);
+      }
     } catch (error) {
       console.log('Error loading initial data:', error);
       setError('Failed to load initial data. Please try again.');
@@ -63,7 +82,7 @@ export default function SupervisorDashboard({ navigation }) {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Please grant location permissions to use this feature');
+        console.log('Location permission denied');
         return;
       }
 
@@ -71,44 +90,55 @@ export default function SupervisorDashboard({ navigation }) {
         accuracy: Location.Accuracy.High,
       });
 
-      const newLocation = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      };
+      if (location && location.coords) {
+        const newLocation = {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        };
 
-      setCurrentLocation(newLocation);
-      setMapRegion({
-        ...newLocation,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      });
+        setCurrentLocation(newLocation);
+        setMapRegion({
+          ...newLocation,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        });
+      }
     } catch (error) {
-      Alert.alert('Error', 'Unable to get your current location');
+      console.log('Error getting current location:', error);
+      // Silent failure, don't show alert to prevent crashes
     }
   };
 
   const fitMapToMarkers = () => {
-    if (mapRef?.current) {
+    try {
+      if (!mapRef?.current) return;
+      
       const points = [];
       
       // Add current location if available
-      if (currentLocation) {
+      if (currentLocation && currentLocation.latitude && currentLocation.longitude) {
         points.push(currentLocation);
       }
       
-      // Add surveyor locations
-      surveyors.forEach(surveyor => {
-        if (surveyor?.location) {
-          points.push(surveyor?.location);
-        }
-      });
+      // Add surveyor locations with null checks
+      if (Array.isArray(surveyors)) {
+        surveyors.forEach(surveyor => {
+          if (surveyor && surveyor.location && 
+              surveyor.location.latitude && 
+              surveyor.location.longitude) {
+            points.push(surveyor.location);
+          }
+        });
+      }
       
       if (points.length > 0) {
-        mapRef?.current?.fitToCoordinates(points, {
+        mapRef.current.fitToCoordinates(points, {
           edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
           animated: true,
         });
       }
+    } catch (error) {
+      console.log('Error fitting map to markers:', error);
     }
   };
 
@@ -117,34 +147,39 @@ export default function SupervisorDashboard({ navigation }) {
 
   const fetchAssignedLocations = async () => {
     try {
+      if (!LOCATION_URL) {
+        console.log('LOCATION_URL is undefined');
+        setAssignedLocations({});
+        return;
+      }
+      
       const response = await fetch(`${LOCATION_URL}/api/locations`);
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log('Error response:', errorText);
-        Alert.alert('Error', 'Failed to fetch locations');
+      if (!response || !response.ok) {
+        console.log('Error response from location API');
         setAssignedLocations({});
         return;
       }
       
       const data = await response.json();
-      const locations = data?.data || [];
+      const locations = data && data.data ? data.data : [];
 
       // Create a map of surveyorId to array of their assigned locations
       const locationMap = {};
-      locations.forEach(location => {
-        if (location?.assignedTo) {
-          if (!locationMap[location?.assignedTo]) {
-            locationMap[location?.assignedTo] = [];
+      if (Array.isArray(locations)) {
+        locations.forEach(location => {
+          if (location && location.assignedTo) {
+            if (!locationMap[location.assignedTo]) {
+              locationMap[location.assignedTo] = [];
+            }
+            locationMap[location.assignedTo].push(location);
           }
-          locationMap[location?.assignedTo].push(location);
-        }
-      });
+        });
+      }
 
       setAssignedLocations(locationMap);
     } catch (err) {
       console.log('Error fetching locations:', err);
-      Alert.alert('Error', `Failed to fetch locations: ${err.message}`);
       setAssignedLocations({});
     }
   };
@@ -156,153 +191,224 @@ export default function SupervisorDashboard({ navigation }) {
     try {
       if (!currentUser || !currentUser.id) {
         console.log('Cannot fetch surveyors: currentUser or currentUser.id is missing');
-        setError('User data incomplete. Please log in again.');
+        setSurveyors([]);
+        return;
+      }
+
+      if (!AUTH_URL) {
+        console.log('AUTH_URL is undefined');
         setSurveyors([]);
         return;
       }
 
       const response = await fetch(`${AUTH_URL}/api/auth/users`);
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log('Error response:', errorText);
-        setError('Failed to fetch surveyors');
+      if (!response || !response.ok) {
+        console.log('Error response from auth API');
         setSurveyors([]);
         return;
       }
       
       const data = await response.json();
-      if (!Array.isArray(data?.data)) {
+      if (!data || !Array.isArray(data.data)) {
         console.log('Invalid surveyors data format:', data);
-        setError('Invalid response format when fetching surveyors');
         setSurveyors([]);
         return;
       }
       
-      const surveyors = data.data.filter(user =>
-        user?.role === "SURVEYOR" &&
-        user?.reportingTo &&
-        user?.reportingTo?._id?.toString() === currentUser.id
+      // Add null checks for filtering
+      const filteredSurveyors = data.data.filter(user =>
+        user && 
+        user.role === "SURVEYOR" &&
+        user.reportingTo &&
+        user.reportingTo._id &&
+        currentUser && 
+        currentUser.id && 
+        user.reportingTo._id.toString() === currentUser.id
       );
       
-      setSurveyors(surveyors);
+      setSurveyors(filteredSurveyors || []);
     } catch (err) {
       console.log('Error fetching surveyors:', err);
-      setError(`Failed to load surveyors: ${err.message}`);
       setSurveyors([]);
     }
   };
 
   // Consider users with status 1 as present
   const presentSurveyors = Array.isArray(surveyors) 
-    ? surveyors.filter((s) => s?.status === 1)
+    ? surveyors.filter((s) => s && s.status === 1)
     : [];
 
   const handleAssignLocation = (surveyorId) => {
-    if (!surveyorId) {
-      Alert.alert('Error', 'Invalid surveyor selected');
-      return;
-    }
-    navigation.navigate('AssignLocation', { 
-      surveyorId,
-      onLocationAssigned: () => {
-        fetchAssignedLocations();
+    try {
+      if (!surveyorId) {
+        console.log('Invalid surveyor ID');
+        return;
       }
-    });
+      
+      if (!navigation) {
+        console.log('Navigation prop is undefined');
+        return;
+      }
+      
+      navigation.navigate('AssignLocation', { 
+        surveyorId,
+        onLocationAssigned: () => {
+          fetchAssignedLocations();
+        }
+      });
+    } catch (error) {
+      console.log('Error navigating to AssignLocation:', error);
+    }
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        },
-        {
-          text: 'Logout',
-          onPress: () => logout()
-        }
-      ]
-    );
+    try {
+      Alert.alert(
+        'Logout',
+        'Are you sure you want to logout?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Logout',
+            onPress: () => {
+              if (typeof logout === 'function') {
+                logout();
+              } else {
+                console.log('Logout function not available');
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.log('Error during logout:', error);
+    }
   };
 
   const renderSurveyor = ({ item }) => {
-    // Get array of locations for this surveyor
-    const surveyorLocations = assignedLocations[item._id] || [];
+    try {
+      if (!item) return null;
+      
+      // Get array of locations for this surveyor with null checks
+      const surveyorLocations = item._id && assignedLocations && 
+                               assignedLocations[item._id] ? 
+                               assignedLocations[item._id] : [];
 
-    return (
-      <View style={styles.card}>
-        <Text style={styles.name}>{item?.username}</Text>
-        <Text style={styles.email}>{item?.email}</Text>
-        <Text style={styles.status}>Status: {item?.status === 1 ? 'Active' : 'Inactive'}</Text>
-        <Text style={styles.lastLogin}>Last Login: {new Date(item?.lastLogin)?.toLocaleString()}</Text>
-        
-        {surveyorLocations.length > 0 ? (
-          <>
-            <View style={styles.locationsContainer}>
-              <Text style={styles.locationHeader}>Assigned Locations ({surveyorLocations?.length}):</Text>
-              {surveyorLocations.map((location) => (
-                location && (
-                  <View key={location._id} style={styles.locationInfo}>
-                    <Text style={styles.locationTitle}>📍 {location?.title}</Text>
-                    <Text style={styles.locationDetails}>
-                      Center: ({location?.centerPoint?.coordinates?.[1]?.toFixed(6) || 'N/A'},
-                      {location?.centerPoint?.coordinates?.[0]?.toFixed(6) || 'N/A'})
-                    </Text>
-                    <Text style={styles.locationDetails}>Status: {location?.status || 'N/A'}</Text>
-                    <Text style={styles.locationDetails}>Radius: {location?.radius || 0}m</Text>
-                  </View>
-                )
-              ))}
-            </View>
-            
-            {/* Show Assign Another Location button only when there are existing locations */}
+      return (
+        <View style={styles.card}>
+          <Text style={styles.name}>{item.username || 'Unknown'}</Text>
+          <Text style={styles.email}>{item.email || 'No email'}</Text>
+          <Text style={styles.status}>Status: {item.status === 1 ? 'Active' : 'Inactive'}</Text>
+          <Text style={styles.lastLogin}>
+            Last Login: {item.lastLogin ? new Date(item.lastLogin).toLocaleString() : 'Unknown'}
+          </Text>
+          
+          {Array.isArray(surveyorLocations) && surveyorLocations.length > 0 ? (
+            <>
+              <View style={styles.locationsContainer}>
+                <Text style={styles.locationHeader}>
+                  Assigned Locations ({surveyorLocations.length}):
+                </Text>
+                {surveyorLocations.map((location) => (
+                  location && location._id ? (
+                    <View key={location._id} style={styles.locationInfo}>
+                      <Text style={styles.locationTitle}>📍 {location.title || 'Unnamed Location'}</Text>
+                      <Text style={styles.locationDetails}>
+                        Center: ({
+                          location.centerPoint && 
+                          location.centerPoint.coordinates && 
+                          location.centerPoint.coordinates[1] ? 
+                          location.centerPoint.coordinates[1].toFixed(6) : 'N/A'
+                        },
+                        {
+                          location.centerPoint && 
+                          location.centerPoint.coordinates && 
+                          location.centerPoint.coordinates[0] ? 
+                          location.centerPoint.coordinates[0].toFixed(6) : 'N/A'
+                        })
+                      </Text>
+                      <Text style={styles.locationDetails}>Status: {location.status || 'N/A'}</Text>
+                      <Text style={styles.locationDetails}>Radius: {location.radius || 0}m</Text>
+                    </View>
+                  ) : null
+                ))}
+              </View>
+              
+              {item._id && (
+                <TouchableOpacity
+                  style={[styles.assignBtn, { marginTop: 8 }]}
+                  onPress={() => handleAssignLocation(item._id)}
+                >
+                  <Text style={styles.btnText}>Assign Another Location</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : item._id ? (
             <TouchableOpacity
-              style={[styles.assignBtn, { marginTop: 8 }]}
+              style={styles.assignBtn}
               onPress={() => handleAssignLocation(item._id)}
             >
-              <Text style={styles.btnText}>Assign Another Location</Text>
+              <Text style={styles.btnText}>Assign Location</Text>
             </TouchableOpacity>
-          </>
-        ) : (
-          // Show single Assign Location button when no locations are assigned
-          <TouchableOpacity
-            style={styles.assignBtn}
-            onPress={() => handleAssignLocation(item._id)}
-          >
-            <Text style={styles.btnText}>Assign Location</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
+          ) : null}
+        </View>
+      );
+    } catch (error) {
+      console.log('Error rendering surveyor:', error);
+      return (
+        <View style={styles.card}>
+          <Text style={styles.errorText}>Error displaying this surveyor</Text>
+        </View>
+      );
+    }
   };
 
   const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    setError(null); // Clear any errors when refreshing
-    
-    const refreshData = async () => {
-      try {
-        // First refresh user data in case it changed
-        await fetchCurrentUser();
-        
-        // Then load all other data
-        await Promise.all([
-          fetchSurveyors(),
-          fetchAssignedLocations(),
-          getCurrentLocation()
-        ]);
-      } catch (error) {
-        console.log('Error refreshing data:', error);
-        setError('Failed to refresh data. Pull down to try again.');
-      } finally {
-        setRefreshing(false);
-      }
-    };
-    
-    refreshData();
+    try {
+      setRefreshing(true);
+      setError(null);
+      
+      const refreshData = async () => {
+        try {
+          // First refresh user data in case it changed
+          if (typeof fetchCurrentUser === 'function') {
+            await fetchCurrentUser();
+          }
+          
+          // Run each function separately to prevent one failure from stopping others
+          try {
+            await fetchSurveyors();
+          } catch (error) {
+            console.log('Error refreshing surveyors:', error);
+          }
+          
+          try {
+            await fetchAssignedLocations();
+          } catch (error) {
+            console.log('Error refreshing locations:', error);
+          }
+          
+          try {
+            await getCurrentLocation();
+          } catch (error) {
+            console.log('Error refreshing location:', error);
+          }
+        } catch (error) {
+          console.log('Error refreshing data:', error);
+        } finally {
+          setRefreshing(false);
+        }
+      };
+      
+      refreshData();
+    } catch (error) {
+      console.log('Error in onRefresh:', error);
+      setRefreshing(false);
+    }
   }, [currentUser]);
 
   return (
@@ -310,7 +416,9 @@ export default function SupervisorDashboard({ navigation }) {
       <View style={styles.header}>
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Supervisor Dashboard</Text>
-          <Text style={styles.headerSubtitle}>{currentUser?.name || 'Welcome'}</Text>
+          <Text style={styles.headerSubtitle}>
+            {currentUser && currentUser.name ? currentUser.name : 'Welcome'}
+          </Text>
         </View>
         <TouchableOpacity
           style={styles.logoutBtn}
@@ -323,7 +431,11 @@ export default function SupervisorDashboard({ navigation }) {
       <View style={styles.actionButtonsContainer}>
         <TouchableOpacity
           style={[styles.actionButton, styles.reviewBtn]}
-          onPress={() => navigation.navigate('ReviewSurvey')}
+          onPress={() => {
+            if (navigation) {
+              navigation.navigate('ReviewSurvey');
+            }
+          }}
         >
           <Text style={styles.actionButtonText}>📋 Review Surveys</Text>
         </TouchableOpacity>
@@ -347,11 +459,15 @@ export default function SupervisorDashboard({ navigation }) {
         <>
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>{presentSurveyors?.length}</Text>
+              <Text style={styles.statValue}>
+                {Array.isArray(presentSurveyors) ? presentSurveyors.length : 0}
+              </Text>
               <Text style={styles.statLabel}>Active Surveyors</Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>{surveyors?.length}</Text>
+              <Text style={styles.statValue}>
+                {Array.isArray(surveyors) ? surveyors.length : 0}
+              </Text>
               <Text style={styles.statLabel}>Total Surveyors</Text>
             </View>
           </View>
@@ -360,9 +476,13 @@ export default function SupervisorDashboard({ navigation }) {
             style={styles.feedbackButton}
             onPress={() => {
               try {
-                showFeedbackForm();
+                if (typeof showFeedbackForm === 'function') {
+                  showFeedbackForm();
+                } else {
+                  console.log('Feedback form function not available');
+                }
               } catch (error) {
-                Alert.alert('Feedback Unavailable', 'Feedback feature is not available in this version.');
+                console.log('Error showing feedback form:', error);
               }
             }}
           >
@@ -374,14 +494,18 @@ export default function SupervisorDashboard({ navigation }) {
               ref={mapRef}
               style={styles.map}
               region={mapRegion}
-              onRegionChangeComplete={setMapRegion}
+              onRegionChangeComplete={(region) => {
+                if (region) setMapRegion(region);
+              }}
               showsUserLocation={true}
               showsMyLocationButton={true}
               showsCompass={true}
               zoomControlEnabled={true}
             >
               {/* Show current location marker */}
-              {currentLocation && (
+              {currentLocation && 
+               currentLocation.latitude && 
+               currentLocation.longitude && (
                 <Marker
                   coordinate={currentLocation}
                   title="Your Location"
@@ -390,12 +514,13 @@ export default function SupervisorDashboard({ navigation }) {
               )}
 
               {/* Show surveyor markers */}
-              {presentSurveyors.map((s) => (
-                s.location && (
+              {Array.isArray(presentSurveyors) && presentSurveyors.map((s) => (
+                s && s._id && s.location && 
+                s.location.latitude && s.location.longitude && (
                   <Marker
                     key={s._id}
-                    coordinate={s?.location}
-                    title={s?.username}
+                    coordinate={s.location}
+                    title={s.username || 'Unknown'}
                     description="Current Location"
                     pinColor="#1976D2"
                   />
@@ -403,7 +528,10 @@ export default function SupervisorDashboard({ navigation }) {
               ))}
             </MapView>
 
-            <TouchableOpacity style={styles.fitBtn} onPress={fitMapToMarkers}>
+            <TouchableOpacity 
+              style={styles.fitBtn} 
+              onPress={fitMapToMarkers}
+            >
               <Text style={styles.btnText}>Fit All Points</Text>
             </TouchableOpacity>
 
@@ -416,8 +544,8 @@ export default function SupervisorDashboard({ navigation }) {
           </View>
 
           <FlatList
-            data={surveyors}
-            keyExtractor={(item) => item._id}
+            data={Array.isArray(surveyors) ? surveyors : []}
+            keyExtractor={(item) => item && item._id ? item._id : Math.random().toString()}
             renderItem={renderSurveyor}
             contentContainerStyle={{ paddingBottom: 20 }}
             refreshControl={

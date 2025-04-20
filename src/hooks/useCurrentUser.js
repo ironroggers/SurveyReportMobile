@@ -17,12 +17,25 @@ export const useCurrentUser = () => {
       }
       
       if (userData) {
-        const parsedUser = JSON.parse(userData);
-        setCurrentUser(parsedUser);
+        try {
+          const parsedUser = JSON.parse(userData);
+          setCurrentUser(parsedUser || null);
+        } catch (parseError) {
+          console.error('Error parsing user data:', parseError);
+          setError('Invalid user data format');
+          // Delete the corrupted data
+          await AsyncStorage.removeItem('userInfo');
+          await AsyncStorage.removeItem('userData');
+          setCurrentUser(null);
+        }
+      } else {
+        // Make sure currentUser is null if no data is found
+        setCurrentUser(null);
       }
     } catch (err) {
       console.error('Error fetching current user:', err);
       setError('Failed to fetch current user');
+      setCurrentUser(null);
     } finally {
       setLoading(false);
     }
@@ -38,6 +51,10 @@ export const useCurrentUser = () => {
         }
       } catch (err) {
         console.error('Error in loadUser:', err);
+        if (mounted) {
+          setError('Failed to load user data');
+          setLoading(false);
+        }
       }
     };
 
@@ -50,9 +67,16 @@ export const useCurrentUser = () => {
 
   const updateCurrentUser = async (userData) => {
     try {
+      if (!userData) {
+        console.error('Attempted to update with null user data');
+        return;
+      }
+      
+      const userJson = JSON.stringify(userData);
+      
       // Update in both storage keys to ensure compatibility
-      await AsyncStorage.setItem('userInfo', JSON.stringify(userData));
-      await AsyncStorage.setItem('userData', JSON.stringify(userData));
+      await AsyncStorage.setItem('userInfo', userJson);
+      await AsyncStorage.setItem('userData', userJson);
       setCurrentUser(userData);
     } catch (err) {
       console.error('Error updating current user:', err);

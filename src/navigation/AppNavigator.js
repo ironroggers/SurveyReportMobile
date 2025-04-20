@@ -23,6 +23,10 @@ const Stack = createNativeStackNavigator();
 export default function AppNavigator() {
   const { isLoading, userToken, userInfo, logout } = useContext(AuthContext);
 
+  // Safe access to userInfo
+  const safeUserInfo = userInfo || {};
+  const userRole = safeUserInfo.role || '';
+
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -45,7 +49,7 @@ export default function AppNavigator() {
 
   return (
     <Stack.Navigator screenOptions={defaultScreenOptions}>
-      {userToken === null ? (
+      {!userToken ? (
         // Auth Stack
         <>
           <Stack.Screen 
@@ -59,7 +63,7 @@ export default function AppNavigator() {
             options={{ headerShown: false }} 
           />
         </>
-      ) : userInfo?.role === 'SURVEYOR' ? (
+      ) : userRole.toUpperCase() === 'SURVEYOR' ? (
         // Surveyor Stack
         <>
           <Stack.Screen 
@@ -92,7 +96,7 @@ export default function AppNavigator() {
             }}
           />
         </>
-      ) : (
+      ) : userRole.toUpperCase() === 'SUPERVISOR' ? (
         // Supervisor Stack
         <>
           <Stack.Screen 
@@ -125,6 +129,16 @@ export default function AppNavigator() {
             }}
           />
         </>
+      ) : (
+        // If role is not recognized, show the role selection screen
+        <Stack.Screen
+          name="RoleSelection"
+          component={RoleSelectionScreen}
+          options={{
+            headerTitle: 'Select Role',
+            headerLeft: null, // Disable back button
+          }}
+        />
       )}
     </Stack.Navigator>
   );

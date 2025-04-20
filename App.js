@@ -1,15 +1,29 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AuthProvider } from './src/context/AuthContext';
-import { View, Text } from 'react-native';
+import { View, Text, Platform } from 'react-native';
 import { initInstabug, reportCrash } from './src/utils/instabug';
 
-// Initialize Instabug if available
-if (__DEV__) {
-  // The init function will safely handle the case when Instabug is not available
-  initInstabug('9275d57118506d1ac0a79bd77fc966ef', ['shake']);
-}
+// Check if we're in bridgeless mode - added check
+const isBridgeless = global.__turboModuleProxy != null;
+
+// Initialize Instabug more safely
+const initializeInstabug = () => {
+  try {
+    // Only initialize Instabug in development mode or when not in bridgeless mode
+    // This avoids the NativeEventEmitter error in bridgeless mode
+    if (__DEV__ && !isBridgeless) {
+      console.log('Initializing Instabug...');
+      initInstabug('9275d57118506d1ac0a79bd77fc966ef', ['shake']);
+      console.log('Instabug initialization complete');
+    } else if (isBridgeless) {
+      console.log('Skipping Instabug initialization in bridgeless mode');
+    }
+  } catch (error) {
+    console.log('Failed to initialize Instabug:', error);
+  }
+};
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
@@ -42,6 +56,11 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function App() {
+  useEffect(() => {
+    // Initialize Instabug after the component mounts
+    initializeInstabug();
+  }, []);
+
   return (
     <ErrorBoundary>
       <AuthProvider>

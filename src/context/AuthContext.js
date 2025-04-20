@@ -32,8 +32,17 @@ export const AuthProvider = ({ children }) => {
         }
         
         if (token && userInfoData) {
-          setUserToken(token);
-          setUserInfo(JSON.parse(userInfoData));
+          try {
+            setUserToken(token);
+            // Parse userInfo safely
+            const parsedUserInfo = JSON.parse(userInfoData);
+            setUserInfo(parsedUserInfo || {});
+          } catch (parseError) {
+            console.error('Failed to parse user info:', parseError);
+            // Clear invalid data
+            await AsyncStorage.removeItem('userInfo');
+            await AsyncStorage.removeItem('userToken');
+          }
         }
       } catch (e) {
         console.error('Failed to fetch auth state:', e);
@@ -47,6 +56,18 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
+      if (!email || !password) {
+        console.log('Email or password is missing');
+        setError('Email and password are required');
+        return null;
+      }
+
+      if (!AUTH_URL) {
+        console.log('AUTH_URL is undefined');
+        setError('API URL is not configured');
+        return null;
+      }
+
       setIsLoading(true);
       const response = await fetch(`${AUTH_URL}/api/auth/login`, {
         method: 'POST',
@@ -67,7 +88,7 @@ export const AuthProvider = ({ children }) => {
       console.log('Full login response:', data);
       
       // Check if the response contains a token
-      if (!data.data.token) {
+      if (!data || !data.data || !data.data.token) {
         console.log('Warning: Token not found in login response');
         setError('Invalid response format: No authentication token received');
         return null;
@@ -82,8 +103,14 @@ export const AuthProvider = ({ children }) => {
         setUserInfo(data.data.user);
         
         // Identify user in Instabug only if user data exists
-        const userId = data.data.user.id || data.data.user._id;
-        identifyUser(userId, data.data.user.email, data.data.user.username);
+        try {
+          const userId = data.data.user.id || data.data.user._id;
+          if (userId && typeof identifyUser === 'function') {
+            identifyUser(userId, data.data.user.email, data.data.user.username);
+          }
+        } catch (instabugError) {
+          console.log('Instabug identification error:', instabugError);
+        }
         
         // Store user info
         await AsyncStorage.setItem('userInfo', JSON.stringify(data.data.user));
@@ -111,6 +138,18 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (username, email, password, role) => {
     try {
+      if (!username || !email || !password) {
+        console.log('Required registration fields missing');
+        setError('All registration fields are required');
+        return null;
+      }
+
+      if (!AUTH_URL) {
+        console.log('AUTH_URL is undefined');
+        setError('API URL is not configured');
+        return null;
+      }
+
       setIsLoading(true);
       const response = await fetch(`${AUTH_URL}/api/auth/register`, {
         method: 'POST',
@@ -131,7 +170,7 @@ export const AuthProvider = ({ children }) => {
       console.log('Full registration response:', data);
       
       // Check if the response contains a token
-      if (!data.data?.token) {
+      if (!data || !data.data || !data.data.token) {
         console.log('Warning: Token not found in registration response');
         setError('Invalid response format: No authentication token received');
         return null;
@@ -142,12 +181,18 @@ export const AuthProvider = ({ children }) => {
       await AsyncStorage.setItem('userToken', data.data.token);
       
       // Check if user data exists in the response
-      if (data.data?.user) {
+      if (data.data.user) {
         setUserInfo(data.data.user);
         
         // Identify user in Instabug only if user data exists
-        const userId = data.data.user.id || data.data.user._id;
-        identifyUser(userId, data.data.user.email, data.data.user.username);
+        try {
+          const userId = data.data.user.id || data.data.user._id;
+          if (userId && typeof identifyUser === 'function') {
+            identifyUser(userId, data.data.user.email, data.data.user.username);
+          }
+        } catch (instabugError) {
+          console.log('Instabug identification error:', instabugError);
+        }
         
         // Store user info
         await AsyncStorage.setItem('userInfo', JSON.stringify(data.data.user));
@@ -185,9 +230,15 @@ export const AuthProvider = ({ children }) => {
       setUserInfo(null);
       
       // Clear user identification in Instabug
-      clearInstabugUserAttribute('userId');
-      clearInstabugUserAttribute('email');
-      clearInstabugUserAttribute('username');
+      try {
+        if (typeof clearInstabugUserAttribute === 'function') {
+          clearInstabugUserAttribute('userId');
+          clearInstabugUserAttribute('email');
+          clearInstabugUserAttribute('username');
+        }
+      } catch (instabugError) {
+        console.log('Error clearing Instabug user attributes:', instabugError);
+      }
     } catch (error) {
       console.log('Error during logout:', error);
     } finally {
@@ -196,17 +247,16 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider 
-      value={{ 
-        isLoading, 
-        userToken, 
-        userInfo, 
-        error, 
-        login, 
-        register, 
-        logout 
-      }}
-    >
+    <AuthContext.Provider
+      value={{
+        login,
+        register,
+        logout,
+        isLoading,
+        userToken,
+        userInfo,
+        error,
+      }}>
       {children}
     </AuthContext.Provider>
   );
