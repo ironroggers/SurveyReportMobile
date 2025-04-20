@@ -1,6 +1,7 @@
 import React, { createContext, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Alert} from "react-native";
+import {AUTH_URL} from "../api-url";
 
 export const AuthContext = createContext();
 
@@ -11,7 +12,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       setIsLoading(true);
-      const response = await fetch('http://localhost:3000/api/auth/login', {
+      const response = await fetch({AUTH_URL}+'/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -29,6 +30,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       // Store both token and user data
+      console.log("Logging the data : 33" ,data);
       await AsyncStorage.setItem('userToken', data.token);
       await AsyncStorage.setItem('userData', JSON.stringify(data.user));
       

@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import authApi from '../api/authApi';
-import { API_URL } from '../api-url';
+import { AUTH_URL } from '../api-url';
 import { identifyUser, clearInstabugUserAttribute } from '../utils/instabug';
 
 export const AuthContext = createContext();
@@ -16,12 +16,24 @@ export const AuthProvider = ({ children }) => {
     // Check if user is logged in when app starts
     const bootstrapAsync = async () => {
       try {
+        // Get token
         const token = await AsyncStorage.getItem('userToken');
-        const userData = await AsyncStorage.getItem('userData');
         
-        if (token && userData) {
+        // Check both keys for user data
+        let userInfoData = await AsyncStorage.getItem('userInfo');
+        const userDataOld = await AsyncStorage.getItem('userData');
+        
+        // If data exists in userData but not in userInfo, migrate it
+        if (!userInfoData && userDataOld) {
+          console.log('Migrating user data from userData to userInfo');
+          await AsyncStorage.setItem('userInfo', userDataOld);
+          await AsyncStorage.removeItem('userData'); // Clean up old key
+          userInfoData = userDataOld;
+        }
+        
+        if (token && userInfoData) {
           setUserToken(token);
-          setUserInfo(JSON.parse(userData));
+          setUserInfo(JSON.parse(userInfoData));
         }
       } catch (e) {
         console.error('Failed to fetch auth state:', e);
@@ -36,7 +48,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_URL}/auth/login`, {
+      const response = await fetch(`${AUTH_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -47,19 +59,45 @@ export const AuthProvider = ({ children }) => {
       const data = await response.json();
 
       if (!response.ok) {
+        console.log('Login failed response:', data);
         throw new Error(data.message || 'Login failed');
       }
 
-      setUserToken(data.token);
-      setUserInfo(data.user);
+      console.log('Full login response:', data);
       
-      // Identify user in Instabug
-      identifyUser(data.user._id, data.user.email, data.user.username);
-      
-      await AsyncStorage.setItem('userToken', data.token);
-      await AsyncStorage.setItem('userInfo', JSON.stringify(data.user));
+      // Check if the response contains a token
+      if (!data.data.token) {
+        console.log('Warning: Token not found in login response');
+        throw new Error('Invalid response format: No authentication token received');
+      }
 
-      return data.user.role;
+      // Store the token
+      setUserToken(data.data.token);
+      await AsyncStorage.setItem('userToken', data.data.token);
+      
+      // Check if user data exists in the response
+      if (data.data.user) {
+        setUserInfo(data.data.user);
+        
+        // Identify user in Instabug only if user data exists
+        const userId = data.data.user.id || data.data.user._id;
+        identifyUser(userId, data.data.user.email, data.data.user.username);
+        
+        // Store user info
+        await AsyncStorage.setItem('userInfo', JSON.stringify(data.data.user));
+      } else {
+        console.log('Warning: User data not found in login response');
+        // Create a minimal userInfo object with available data
+        const minimalUserInfo = {
+          email: email,
+          role: data.role || 'unknown'
+        };
+        setUserInfo(minimalUserInfo);
+        await AsyncStorage.setItem('userInfo', JSON.stringify(minimalUserInfo));
+      }
+
+      // Return role if it exists, or a default value
+      return data.data.user?.role || (data.data.role || 'unknown');
     } catch (error) {
       throw error;
     } finally {
@@ -70,7 +108,7 @@ export const AuthProvider = ({ children }) => {
   const register = async (username, email, password, role) => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_URL}/auth/register`, {
+      const response = await fetch(`${AUTH_URL}/api/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -81,19 +119,46 @@ export const AuthProvider = ({ children }) => {
       const data = await response.json();
 
       if (!response.ok) {
+        console.log('Registration failed response:', data);
         throw new Error(data.message || 'Registration failed');
       }
 
-      setUserToken(data.token);
-      setUserInfo(data.user);
+      console.log('Full registration response:', data);
       
-      // Identify user in Instabug
-      identifyUser(data.user._id, data.user.email, data.user.username);
-      
-      await AsyncStorage.setItem('userToken', data.token);
-      await AsyncStorage.setItem('userInfo', JSON.stringify(data.user));
+      // Check if the response contains a token
+      if (!data.data?.token) {
+        console.log('Warning: Token not found in registration response');
+        throw new Error('Invalid response format: No authentication token received');
+      }
 
-      return data.user.role;
+      // Store the token
+      setUserToken(data.data.token);
+      await AsyncStorage.setItem('userToken', data.data.token);
+      
+      // Check if user data exists in the response
+      if (data.data?.user) {
+        setUserInfo(data.data.user);
+        
+        // Identify user in Instabug only if user data exists
+        const userId = data.data.user.id || data.data.user._id;
+        identifyUser(userId, data.data.user.email, data.data.user.username);
+        
+        // Store user info
+        await AsyncStorage.setItem('userInfo', JSON.stringify(data.data.user));
+      } else {
+        console.log('Warning: User data not found in registration response');
+        // Create a minimal userInfo object with available data
+        const minimalUserInfo = {
+          username: username,
+          email: email,
+          role: role || data.data?.role || 'unknown'
+        };
+        setUserInfo(minimalUserInfo);
+        await AsyncStorage.setItem('userInfo', JSON.stringify(minimalUserInfo));
+      }
+
+      // Return role if it exists, or a default value
+      return data.data?.user?.role || (data.data?.role || role || 'unknown');
     } catch (error) {
       throw error;
     } finally {
@@ -104,8 +169,10 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       setIsLoading(true);
+      // Clear all user-related data
       await AsyncStorage.removeItem('userToken');
       await AsyncStorage.removeItem('userInfo');
+      await AsyncStorage.removeItem('userData'); // Clear old key too, just in case
       setUserToken(null);
       setUserInfo(null);
       

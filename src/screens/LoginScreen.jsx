@@ -17,7 +17,6 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { login, isLoading, error } = useContext(AuthContext);
-
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
@@ -25,47 +24,86 @@ export default function LoginScreen({ navigation }) {
     }
 
     try {
-      const userRole = await login(email, password);
+      console.log('Attempting login with email:', email);
       
-      if (!userRole) {
-        console.log('No role received from login');
-        Alert.alert('Error', 'Invalid login response - no role received');
+      // Add a loading message for better UX during login
+      if (Platform.OS === 'ios') {
+        // On iOS, show a loading indicator
+        // (On Android, we already have the isLoading state for this)
+        Alert.alert('Logging in...', 'Please wait while we authenticate you.');
+      }
+      
+      const userRole = await login(email, password);
+      console.log("UserRole after login:", userRole);
+      
+      if (!userRole || userRole === 'unknown') {
+        console.log('No role or unknown role received from login:', userRole);
+        // Still allow login but with a warning
+        Alert.alert(
+          'Warning',
+          'Could not determine your role. Some features might be limited.',
+          [
+            { 
+              text: 'Continue',
+              onPress: () => {
+                // Default to SURVEYOR if role is unknown
+                navigateBasedOnRole('SURVEYOR');
+              }
+            }
+          ]
+        );
         return;
       }
 
-      const normalizedRole = userRole.toUpperCase();
-      
-      // Use requestAnimationFrame instead of setTimeout for smoother transition
-      requestAnimationFrame(() => {
-        try {
-          if (normalizedRole === 'SUPERVISOR') {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'SupervisorDashboard' }],
-            });
-          } else if (normalizedRole === 'SURVEYOR') {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'SurveyorDashboard' }],
-            });
-          } else {
-            Alert.alert('Error', `Unknown role: ${userRole}`);
-          }
-        } catch (navError) {
-          console.log('Navigation error:', navError);
-          Alert.alert(
-            'Navigation Error',
-            'Could not navigate to dashboard. Please try logging in again.'
-          );
-        }
-      });
+      console.log('Login successful, user role:', userRole);
+      navigateBasedOnRole(userRole.toUpperCase());
     } catch (error) {
-      console.log('Login error:', error);
+      console.log('Login error details:', error);
+      
+      // More detailed error message
+      let errorMessage = 'Could not log in. Please check your credentials and try again.';
+      
+      if (error.message) {
+        errorMessage = error.message;
+        
+        // Add more helpful information for specific errors
+        if (error.message.includes('No authentication token')) {
+          errorMessage += '\n\nThe server response format was unexpected. Please contact support.';
+        }
+      }
+      
       Alert.alert(
         'Login Failed',
-        error.message || 'Could not log in. Please check your credentials and try again.'
+        errorMessage
       );
     }
+  };
+
+  // Helper function to navigate based on role
+  const navigateBasedOnRole = (normalizedRole) => {
+    requestAnimationFrame(() => {
+      try {
+        if (normalizedRole === 'SUPERVISOR') {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'SupervisorDashboard' }],
+          });
+        } else if (normalizedRole === 'SURVEYOR') {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'SurveyorDashboard' }],
+          });
+        } else {
+          Alert.alert('Error', `Unknown role: ${normalizedRole}`);
+        }
+      } catch (navError) {
+        console.log('Navigation error:', navError);
+        Alert.alert(
+          'Navigation Error',
+          'Could not navigate to dashboard. Please try logging in again.'
+        );
+      }
+    });
   };
 
   return (
