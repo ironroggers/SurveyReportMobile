@@ -18,6 +18,7 @@ import * as Location from 'expo-location';
 import {LOCATION_URL, AUTH_URL} from "../api-url";
 import { showFeedbackForm } from '../utils/instabug';
 import SafeMapView from '../components/SafeMapView';
+import { MaterialIcons } from '@expo/vector-icons';
 
 // Logging utility to consistently format logs
 const logEvent = (eventName, data = null) => {
@@ -604,6 +605,11 @@ export default function SupervisorDashboard({ navigation }) {
     }
   };
 
+  // Add a function to navigate to personal attendance
+  const navigateToAttendance = () => {
+    navigation.navigate('Attendance');
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView 
@@ -626,12 +632,23 @@ export default function SupervisorDashboard({ navigation }) {
                 {currentUser && currentUser.name ? currentUser.name : 'Welcome'}
               </Text>
             </View>
-            <TouchableOpacity
-              style={styles.logoutBtn}
-              onPress={handleLogout}
-            >
-              <Text style={styles.logoutBtnText}>Logout</Text>
-            </TouchableOpacity>
+            <View style={styles.headerButtons}>
+              <TouchableOpacity 
+                style={styles.attendanceButton}
+                onPress={navigateToAttendance}
+              >
+                <MaterialIcons name="access-time" size={24} color="#fff" />
+                <Text style={styles.attendanceButtonText}>Attendance</Text>
+              </TouchableOpacity>
+            
+              <TouchableOpacity 
+                style={styles.logoutButton}
+                onPress={handleLogout}
+              >
+                <MaterialIcons name="logout" size={24} color="#F44336" />
+                <Text style={styles.logoutButtonText}>Logout</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.actionButtonsContainer}>
@@ -834,6 +851,47 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 14,
     color: '#666',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+  },
+  attendanceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1976D2',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginLeft: 8,
+    marginBottom: 6,
+  },
+  attendanceButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFEBEE',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    marginLeft: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#F44336',
+  },
+  logoutButtonText: {
+    color: '#F44336',
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 6,
   },
   actionButtonsContainer: {
     flexDirection: 'row',

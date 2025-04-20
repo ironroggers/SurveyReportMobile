@@ -14,7 +14,7 @@ export default function SurveyorDashboard({ navigation }) {
   const { currentUser } = useCurrentUser();
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [attendanceMarked, setAttendanceMarked] = useState(false);
+  const [attendanceMarked, setAttendanceMarked] = useState(true);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [initialRegion, setInitialRegion] = useState({
@@ -189,11 +189,6 @@ export default function SurveyorDashboard({ navigation }) {
     }
   };
 
-  const handleMarkAttendance = () => {
-    Alert.alert('Attendance Marked', 'You can now start surveying locations.');
-    setAttendanceMarked(true);
-  };
-
   const handleLogout = () => {
     Alert.alert(
       'Logout',
@@ -300,50 +295,32 @@ export default function SurveyorDashboard({ navigation }) {
         <Text style={styles.locationDetails}>Radius: {item?.radius}m</Text>
         <Text style={styles.statusDetails}>Status: {item?.status}</Text>
 
-        {attendanceMarked ? (
-          item.status === 'ACTIVE' ? (
-            <TouchableOpacity
-              style={[styles.surveyBtn, { backgroundColor: '#2E7D32' }]}
-              onPress={() => navigation.navigate('SurveyList', { location: item })}
-            >
-              <Text style={styles.btnText}>Edit Survey</Text>
-            </TouchableOpacity>
-          ) : (item.status === 'COMPLETED' || item.status === 'APPROVED') ? (
-            <TouchableOpacity
-              style={[styles.surveyBtn, { backgroundColor: '#FF9800' }]}
-              onPress={() => navigation.navigate('ReviewDetails', { 
-                locationId: item._id, 
-                status: item.status, 
-                reviewComment: item.reviewComment,
-                isViewOnly: true 
-              })}
-            >
-              <Text style={styles.btnText}>View Survey</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={styles.surveyBtn}
-              onPress={() => handleStartSurvey(item)}
-            >
-              <Text style={styles.btnText}>Start Survey</Text>
-            </TouchableOpacity>
-          )
+        {item.status === 'ACTIVE' ? (
+          <TouchableOpacity
+            style={[styles.surveyBtn, { backgroundColor: '#2E7D32' }]}
+            onPress={() => navigation.navigate('SurveyList', { location: item })}
+          >
+            <Text style={styles.btnText}>Edit Survey</Text>
+          </TouchableOpacity>
+        ) : (item.status === 'COMPLETED' || item.status === 'APPROVED') ? (
+          <TouchableOpacity
+            style={[styles.surveyBtn, { backgroundColor: '#FF9800' }]}
+            onPress={() => navigation.navigate('ReviewDetails', { 
+              locationId: item._id, 
+              status: item.status, 
+              reviewComment: item.reviewComment,
+              isViewOnly: true 
+            })}
+          >
+            <Text style={styles.btnText}>View Survey</Text>
+          </TouchableOpacity>
         ) : (
-          (item.status === 'COMPLETED' || item.status === 'APPROVED') ? (
-            <TouchableOpacity
-              style={[styles.surveyBtn, { backgroundColor: '#FF9800' }]}
-              onPress={() => navigation.navigate('ReviewDetails', { 
-                locationId: item._id, 
-                status: item.status, 
-                reviewComment: item.reviewComment,
-                isViewOnly: true 
-              })}
-            >
-              <Text style={styles.btnText}>View Survey</Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={styles.markNote}>Mark attendance to begin survey.</Text>
-          )
+          <TouchableOpacity
+            style={styles.surveyBtn}
+            onPress={() => handleStartSurvey(item)}
+          >
+            <Text style={styles.btnText}>Start Survey</Text>
+          </TouchableOpacity>
         )}
       </TouchableOpacity>
     );
@@ -382,15 +359,6 @@ export default function SurveyorDashboard({ navigation }) {
           >
             <Text style={styles.actionButtonText}>View Attendance</Text>
           </TouchableOpacity>
-
-          {!attendanceMarked && (
-            <TouchableOpacity 
-              style={[styles.actionButton, styles.markAttendanceBtn]}
-              onPress={handleMarkAttendance}
-            >
-              <Text style={styles.actionButtonText}>Mark Attendance</Text>
-            </TouchableOpacity>
-          )}
           
           <TouchableOpacity
             style={[styles.actionButton, styles.feedbackBtn]}
@@ -580,9 +548,6 @@ const styles = StyleSheet.create({
   attendanceViewBtn: {
     backgroundColor: '#2196F3',
   },
-  markAttendanceBtn: {
-    backgroundColor: '#4CAF50',
-  },
   logoutBtn: {
     backgroundColor: '#fff',
     paddingHorizontal: 16,
@@ -650,11 +615,6 @@ const styles = StyleSheet.create({
     color: '#fff', 
     textAlign: 'center', 
     fontWeight: '600' 
-  },
-  markNote: {
-    marginTop: 10,
-    fontStyle: 'italic',
-    color: 'gray',
   },
   viewAttendanceBtn: {
     backgroundColor: '#FFA000',

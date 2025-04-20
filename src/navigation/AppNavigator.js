@@ -12,6 +12,7 @@ import RoleSelectionScreen from '../screens/RoleSelectionScreen';
 import SurveyorDashboard from '../screens/SurveyorDashboard';
 import SupervisorDashboard from '../screens/SupervisorDashboard';
 import AttendanceScreen from '../screens/AttendanceScreen';
+import SupervisorAttendanceScreen from '../screens/SupervisorAttendanceScreen';
 import SurveyFormScreen from '../screens/SurveyFormScreen';
 import AssignLocationScreen from '../screens/AssignLocationScreen';
 import ReviewSurveyScreen from '../screens/ReviewSurveyScreen';
@@ -133,6 +134,20 @@ export default function AppNavigator() {
             component={ReviewDetailsScreen}
             options={{
               headerTitle: 'Survey Details',
+            }}
+          />
+          <Stack.Screen 
+            name="Attendance" 
+            component={AttendanceScreen}
+            options={{
+              headerTitle: 'Attendance',
+            }}
+          />
+          <Stack.Screen 
+            name="SupervisorAttendance" 
+            component={SupervisorAttendanceScreen}
+            options={{
+              headerTitle: 'Team Attendance',
             }}
           />
         </>
