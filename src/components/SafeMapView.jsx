@@ -1,9 +1,9 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useState } from 'react';
 import { View, Text, Platform, StyleSheet } from 'react-native';
 import MapView from 'react-native-maps';
 
 /**
- * SafeMapView - A wrapper around MapView that prevents crashes on Android production builds
+ * SafeMapView - A wrapper around MapView with error handling
  * 
  * @param {Object} props - All regular MapView props plus:
  * @param {String} fallbackText - Optional text to display when map is unavailable
@@ -18,11 +18,13 @@ const SafeMapView = forwardRef(({
   children,
   ...mapProps
 }, ref) => {
+  const [hasError, setHasError] = useState(false);
+  
   // Log the platform for debugging
   console.log(`[SafeMapView] Rendering on platform: ${Platform.OS}`);
   
-  if (Platform.OS === 'android' && !__DEV__) {
-    // In Android production builds, use a fallback view instead of MapView
+  if (hasError) {
+    // Show fallback UI when map encounters an error
     return (
       <View
         style={[
@@ -38,16 +40,35 @@ const SafeMapView = forwardRef(({
     );
   }
 
-  // For iOS or during development, use the actual MapView
-  return (
-    <MapView
-      ref={ref}
-      style={style}
-      {...mapProps}
-    >
-      {children}
-    </MapView>
-  );
+  // Render the actual map for all platforms and builds
+  try {
+    return (
+      <MapView
+        ref={ref}
+        style={style}
+        {...mapProps}
+        onError={() => setHasError(true)}
+      >
+        {children}
+      </MapView>
+    );
+  } catch (error) {
+    console.error('[SafeMapView] Error rendering map:', error);
+    setHasError(true);
+    return (
+      <View
+        style={[
+          styles.fallbackContainer,
+          style,
+        ]}
+      >
+        <Text style={styles.fallbackText}>{fallbackText}</Text>
+        {fallbackSubText && (
+          <Text style={styles.fallbackSubText}>{fallbackSubText}</Text>
+        )}
+      </View>
+    );
+  }
 });
 
 const styles = StyleSheet.create({
