@@ -12,10 +12,13 @@ import {
   Modal,
   TextInput,
   FlatList,
+  Platform
 } from 'react-native';
-import MapView, { Marker, Polygon } from 'react-native-maps';
+import { useRoute, useNavigation } from '@react-navigation/native';
+import { Marker, Polygon } from 'react-native-maps';
 import ImageViewing from 'react-native-image-viewing';
 import {LOCATION_URL, SURVEY_URL} from "../api-url";
+import SafeMapView from '../components/SafeMapView';
 
 const windowWidth = Dimensions.get('window').width;
 const imageSize = 100; // Fixed size for thumbnails
@@ -208,12 +211,16 @@ export default function ReviewDetailsScreen({ route, navigation }) {
     <View style={styles.container}>
       <ScrollView style={styles.scrollContainer}>
         <View style={styles.mapContainer}>
-          <MapView
-            ref={mapRef}
+          <SafeMapView
             style={styles.map}
-            region={mapRegion}
-            scrollEnabled={true}
-            zoomEnabled={true}
+            region={{
+              latitude: location.centerPoint.coordinates[1],
+              longitude: location.centerPoint.coordinates[0],
+              latitudeDelta: 0.005,
+              longitudeDelta: 0.005,
+            }}
+            fallbackText="Map temporarily unavailable"
+            fallbackSubText="Location data is still available"
           >
             {/* Location center point marker */}
             <Marker
@@ -253,7 +260,7 @@ export default function ReviewDetailsScreen({ route, navigation }) {
                 strokeWidth={2}
               />
             )}
-          </MapView>
+          </SafeMapView>
           
           <TouchableOpacity style={styles.fitBtn} onPress={fitMapToPoints}>
             <Text style={styles.btnText}>Fit All Points</Text>

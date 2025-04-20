@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ironroggers.LearnReactNative"
+      "bundleIdentifier": "com.ironroggers.LearnReactNative",
+      "config": {
+        "googleMapsApiKey": "AIzaSyC2pds2TL5_lGUM-7Y1CFiGq8Wrn0oULr0"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,6 +27,11 @@
       },
       "package": "com.ironroggers.LearnReactNative",
       "versionCode": 1,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC2pds2TL5_lGUM-7Y1CFiGq8Wrn0oULr0"
+        }
+      },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",

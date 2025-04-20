@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, SafeAreaView, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, SafeAreaView, ScrollView, RefreshControl, Platform } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import MapView, { Marker, Polygon } from 'react-native-maps';
+import { Marker, Polygon } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useIsFocused } from '@react-navigation/native';
 import {LOCATION_URL} from "../api-url";
 import { showFeedbackForm } from '../utils/instabug';
+import SafeMapView from '../components/SafeMapView';
 
 export default function SurveyorDashboard({ navigation }) {
   const { logout } = useContext(AuthContext);
@@ -381,57 +382,76 @@ export default function SurveyorDashboard({ navigation }) {
         </View>
 
         <View style={styles.mapContainer}>
-          <MapView
+          <SafeMapView
             ref={mapRef}
             style={styles.map}
-            initialRegion={initialRegion}
-            onMapReady={() => {
-              console.log('Map is ready');
-            }}
+            region={initialRegion}
+            provider="google"
+            onRegionChangeComplete={region => setInitialRegion(region)}
             showsUserLocation={true}
-            showsMyLocationButton={true}
-            showsCompass={true}
-            zoomControlEnabled={true}
+            fallbackText="Map temporarily unavailable"
+            fallbackSubText={`${filteredLocations.length} assigned locations`}
           >
-            {locations.map((location) => (
-              <React.Fragment key={location._id}>
-                <Marker
-                  coordinate={{
-                    latitude: location.centerPoint.coordinates[1],
-                    longitude: location.centerPoint.coordinates[0],
-                  }}
-                  title={location.title}
-                  onPress={() => handleLocationPress(location)}
-                  pinColor={selectedLocation?._id === location._id ? "#FF0000" : "#1976D2"}
-                />
-                {location.geofence?.coordinates[0]?.length > 0 && (
-                  <Polygon
-                    coordinates={location.geofence.coordinates[0].map(([lng, lat]) => ({
-                      latitude: lat,
-                      longitude: lng,
-                    }))}
-                    strokeColor={selectedLocation?._id === location._id ? "#FF0000" : "#1976D2"}
-                    fillColor={selectedLocation?._id === location._id ? "rgba(255,0,0,0.2)" : "rgba(25,118,210,0.2)"}
-                    strokeWidth={2}
-                  />
-                )}
-              </React.Fragment>
-            ))}
+            {/* Current Location Marker */}
             {currentLocation && (
               <Marker
                 coordinate={currentLocation}
                 title="Your Location"
+                description="Your current position"
                 pinColor="#4CAF50"
               />
             )}
-          </MapView>
 
-          <TouchableOpacity style={styles.locationBtn} onPress={getCurrentLocation}>
-            <Text style={styles.btnText}>Update Location</Text>
-          </TouchableOpacity>
+            {/* Location Markers and Polygons */}
+            {filteredLocations.map((location) => {
+              // Check if location has valid coordinates
+              if (!location?.centerPoint?.coordinates || 
+                 !location?.geofence?.coordinates?.[0] ||
+                 location.geofence.coordinates[0].length < 3) {
+                console.log('Invalid location data for polygon:', location._id);
+                return null;
+              }
 
-          <TouchableOpacity style={styles.fitBtn} onPress={fitMapToPoints}>
-            <Text style={styles.btnText}>Fit All Points</Text>
+              // Create polygon coordinates array
+              const polygonCoords = location.geofence.coordinates[0].map(([lng, lat]) => ({
+                latitude: lat,
+                longitude: lng,
+              }));
+
+              // Create center point coordinates
+              const centerCoord = {
+                latitude: location.centerPoint.coordinates[1],
+                longitude: location.centerPoint.coordinates[0],
+              };
+
+              return (
+                <React.Fragment key={location._id}>
+                  <Marker
+                    coordinate={centerCoord}
+                    title={location.title}
+                    description={`Status: ${location.status}`}
+                    pinColor={location._id === selectedLocation?._id ? '#FF9800' : '#1976D2'}
+                    onPress={() => handleLocationPress(location)}
+                  />
+                  <Polygon
+                    coordinates={polygonCoords}
+                    strokeColor={location._id === selectedLocation?._id ? '#FF9800' : '#1976D2'}
+                    fillColor={location._id === selectedLocation?._id ? 'rgba(255, 152, 0, 0.2)' : 'rgba(25, 118, 210, 0.2)'}
+                    strokeWidth={2}
+                    tappable
+                    onPress={() => handleLocationPress(location)}
+                  />
+                </React.Fragment>
+              );
+            })}
+          </SafeMapView>
+
+          <TouchableOpacity
+            style={styles.fitBtn}
+            onPress={fitMapToPoints}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.fitBtnText}>Fit Map</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.filterContainer}>
@@ -633,6 +653,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#1976D2',
     borderRadius: 8,
     padding: 8,
+  },
+  fitBtnText: {
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: '600',
   },
   scrollContent: {
     flexGrow: 1,

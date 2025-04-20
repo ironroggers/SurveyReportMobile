@@ -11,12 +11,13 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import { Marker } from 'react-native-maps';
 import { AuthContext } from '../context/AuthContext';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import * as Location from 'expo-location';
 import {LOCATION_URL, AUTH_URL} from "../api-url";
 import { showFeedbackForm } from '../utils/instabug';
+import SafeMapView from '../components/SafeMapView';
 
 // Logging utility to consistently format logs
 const logEvent = (eventName, data = null) => {
@@ -652,87 +653,65 @@ export default function SupervisorDashboard({ navigation }) {
           </TouchableOpacity>
 
           <View style={styles.mapContainer}>
-            {Platform.OS === 'android' ? (
-              // Fallback view for Android to prevent crashes
-              <View style={{...styles.map, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f0f0'}}>
-                <Text style={{fontSize: 16, color: '#666'}}>Map temporarily unavailable</Text>
-                <Text style={{fontSize: 12, marginTop: 8, color: '#999'}}>Active surveyors: {Array.isArray(presentSurveyors) ? presentSurveyors.length : 0}</Text>
-              </View>
-            ) : (
-              // Original MapView for iOS and other platforms
-              <MapView
-                ref={mapRef}
-                style={styles.map}
-                region={mapRegion}
-                onRegionChangeComplete={(region) => {
-                  if (region) {
-                    logEvent('Map region changed', region);
-                    setMapRegion(region);
-                  }
-                }}
-                showsUserLocation={true}
-                showsMyLocationButton={true}
-                showsCompass={true}
-                zoomControlEnabled={true}
-              >
-                {/* Show current location marker */}
-                {currentLocation && 
-                 currentLocation.latitude && 
-                 currentLocation.longitude && (
+            <SafeMapView
+              ref={mapRef}
+              style={styles.map}
+              region={mapRegion}
+              onRegionChangeComplete={(region) => {
+                if (region) {
+                  logEvent('Map region changed', region);
+                  setMapRegion(region);
+                }
+              }}
+              showsUserLocation={true}
+              showsMyLocationButton={true}
+              showsCompass={true}
+              zoomControlEnabled={true}
+              fallbackText="Map temporarily unavailable"
+              fallbackSubText={`Active surveyors: ${Array.isArray(presentSurveyors) ? presentSurveyors.length : 0}`}
+            >
+              {/* Show current location marker */}
+              {currentLocation && 
+               currentLocation.latitude && 
+               currentLocation.longitude && (
+                <Marker
+                  coordinate={currentLocation}
+                  title="Your Location"
+                  pinColor="#4CAF50"
+                />
+              )}
+
+              {/* Show surveyor markers */}
+              {Array.isArray(presentSurveyors) && presentSurveyors.map((s) => (
+                s && s._id && s.location && 
+                s.location.latitude && s.location.longitude && (
                   <Marker
-                    coordinate={currentLocation}
-                    title="Your Location"
-                    pinColor="#4CAF50"
+                    key={s._id}
+                    coordinate={s.location}
+                    title={s.username || 'Unknown'}
+                    description="Current Location"
+                    pinColor="#1976D2"
                   />
-                )}
+                )
+              ))}
+            </SafeMapView>
 
-                {/* Show surveyor markers */}
-                {Array.isArray(presentSurveyors) && presentSurveyors.map((s) => (
-                  s && s._id && s.location && 
-                  s.location.latitude && s.location.longitude && (
-                    <Marker
-                      key={s._id}
-                      coordinate={s.location}
-                      title={s.username || 'Unknown'}
-                      description="Current Location"
-                      pinColor="#1976D2"
-                    />
-                  )
-                ))}
-              </MapView>
-            )}
+            <TouchableOpacity 
+              style={styles.fitBtn} 
+              onPress={fitMapToMarkers}
+            >
+              <Text style={styles.btnText}>Fit All Points</Text>
+            </TouchableOpacity>
 
-            {/* Keep the buttons but modify them for Android */}
-            {Platform.OS === 'android' ? (
-              <TouchableOpacity 
-                style={styles.locationBtn} 
-                onPress={() => {
-                  logEvent('Update Location button pressed');
-                  getCurrentLocation();
-                }}
-              >
-                <Text style={styles.btnText}>Update Location</Text>
-              </TouchableOpacity>
-            ) : (
-              <>
-                <TouchableOpacity 
-                  style={styles.fitBtn} 
-                  onPress={fitMapToMarkers}
-                >
-                  <Text style={styles.btnText}>Fit All Points</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.locationBtn} 
-                  onPress={() => {
-                    logEvent('Update Location button pressed');
-                    getCurrentLocation();
-                  }}
-                >
-                  <Text style={styles.btnText}>Update Location</Text>
-                </TouchableOpacity>
-              </>
-            )}
+            <TouchableOpacity 
+              style={styles.locationBtn} 
+              onPress={() => {
+                logEvent('Update Location button pressed');
+                getCurrentLocation();
+              }}
+            >
+              <Text style={styles.btnText}>Update Location</Text>
+            </TouchableOpacity>
           </View>
 
           <FlatList

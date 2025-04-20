@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { View, TextInput, StyleSheet, TouchableOpacity, Text, Alert, ScrollView, FlatList } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, TextInput, StyleSheet, TouchableOpacity, Text, Alert, ScrollView, FlatList, Platform } from 'react-native';
 import MapView, { Marker, Polygon } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as LocationGeocoding from 'expo-location';
 import {useCurrentUser} from "../hooks/useCurrentUser";
 import {LOCATION_URL} from "../api-url";
+import SafeMapView from '../components/SafeMapView';
 
 export default function AssignLocationScreen({ route, navigation }) {
   const { surveyorId } = route.params;
@@ -284,43 +285,61 @@ export default function AssignLocationScreen({ route, navigation }) {
       />
 
       <View style={styles.mapContainer}>
-        <MapView 
+        <SafeMapView
           ref={mapRef}
-          style={styles.map} 
+          style={styles.map}
           region={region}
           onPress={handleMapPress}
           showsUserLocation={true}
-          showsMyLocationButton={true}
-          showsCompass={true}
-          zoomControlEnabled={true}
+          fallbackText="Map temporarily unavailable"
+          fallbackSubText="Draw a polygon by tapping points on the map"
         >
           {selectedLocation && (
-            <Marker coordinate={selectedLocation} title="Selected Location" pinColor="#1976D2" />
+            <Marker
+              coordinate={selectedLocation}
+              pinColor="#1976D2"
+              draggable
+              onDragEnd={(e) => setSelectedLocation(e.nativeEvent.coordinate)}
+            />
           )}
           {currentLocation && (
-            <Marker coordinate={currentLocation} title="Your Location" pinColor="#4CAF50" />
+            <Marker
+              coordinate={currentLocation}
+              pinColor="#4CAF50"
+              draggable
+              onDragEnd={(e) => setRegion({
+                ...region,
+                ...e.nativeEvent.coordinate,
+                latitudeDelta: 0.05,
+                longitudeDelta: 0.05,
+              })}
+            />
           )}
           {polygonPoints.length > 0 && (
             <Polygon
               coordinates={polygonPoints}
-              strokeColor="#F00"
-              fillColor="rgba(255,0,0,0.2)"
+              strokeColor="#1976D2"
+              fillColor="rgba(25, 118, 210, 0.2)"
               strokeWidth={2}
             />
           )}
-        </MapView>
+        </SafeMapView>
 
-        <TouchableOpacity onPress={resetPolygon} style={styles.resetBtn}>
-          <Text style={styles.btnText}>Reset Polygon</Text>
-        </TouchableOpacity>
+        <View style={styles.mapActions}>
+          <TouchableOpacity
+            style={[styles.mapButton, styles.clearButton]}
+            onPress={resetPolygon}
+          >
+            <Text style={styles.buttonText}>Clear</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.locationBtn} onPress={getCurrentLocation}>
-          <Text style={styles.btnText}>Update Location</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.fitBtn} onPress={fitMapToPoints}>
-          <Text style={styles.btnText}>Fit All Points</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.mapButton, styles.currentLocationButton]}
+            onPress={getCurrentLocation}
+          >
+            <Text style={styles.buttonText}>My Location</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Text style={styles.instructions}>
@@ -470,5 +489,21 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
     fontWeight: 'bold',
+  },
+  mapActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 10,
+  },
+  mapButton: {
+    backgroundColor: '#1976D2',
+    padding: 12,
+    borderRadius: 8,
+  },
+  clearButton: {
+    backgroundColor: '#f44336',
+  },
+  currentLocationButton: {
+    backgroundColor: '#4CAF50',
   },
 });

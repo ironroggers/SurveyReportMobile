@@ -8,6 +8,7 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import { Picker } from '@react-native-picker/picker';
 import {SURVEY_URL} from "../api-url";
 import * as FileSystem from 'expo-file-system';
+import SafeMapView from '../components/SafeMapView';
 
 export default function SurveyFormScreen() {
   const [location, setLocation] = useState(null);
@@ -361,41 +362,39 @@ export default function SurveyFormScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.mapContainer}>
-        <MapView
-          ref={mapRef}
+        <SafeMapView
           style={styles.map}
           region={mapRegion}
-          onRegionChangeComplete={setMapRegion}
           showsUserLocation={true}
-          showsMyLocationButton={true}
-          showsCompass={true}
-          zoomControlEnabled={true}
+          fallbackText="Map temporarily unavailable"
+          fallbackSubText="Location information will still be recorded"
         >
-          {location && (
+          {/* Show center marker */}
+          {location?.centerPoint?.coordinates && (
             <Marker
               coordinate={{
-                latitude: location.latitude || 0,
-                longitude: location.longitude || 0
+                latitude: location.centerPoint.coordinates[1],
+                longitude: location.centerPoint.coordinates[0],
               }}
-              title="Survey Point"
+              title={location.title || "Survey Location"}
+              description={`Status: ${location.status}`}
               pinColor="#1976D2"
-              draggable
-              onDragEnd={(e) => setLocation(e.nativeEvent.coordinate)}
             />
           )}
 
-          {assignedLocation?.geofence?.coordinates[0]?.length > 0 && (
+          {/* Show polygon if available */}
+          {location?.geofence?.coordinates?.[0]?.length > 0 && (
             <Polygon
-              coordinates={assignedLocation.geofence.coordinates[0].map(([lng, lat]) => ({
+              coordinates={location.geofence.coordinates[0].map(([lng, lat]) => ({
                 latitude: lat,
                 longitude: lng,
               }))}
-              strokeColor="#FF0000"
-              fillColor="rgba(255,0,0,0.2)"
+              strokeColor="#1976D2"
+              fillColor="rgba(25, 118, 210, 0.2)"
               strokeWidth={2}
             />
           )}
-        </MapView>
+        </SafeMapView>
 
         <TouchableOpacity style={styles.fitBtn} onPress={fitMapToPoints}>
           <Text style={styles.btnText}>Fit All Points</Text>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,12 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Platform,
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import { useRoute } from '@react-navigation/native';
+import { Marker } from 'react-native-maps';
 import * as ImagePicker from 'expo-image-picker';
+import SafeMapView from '../components/SafeMapView';
 
 export default function SurveyDetailsScreen({ route, navigation }) {
   const { survey } = route.params;
@@ -55,18 +58,30 @@ export default function SurveyDetailsScreen({ route, navigation }) {
 
   return (
     <ScrollView style={styles.container}>
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        initialRegion={{
-          latitude: survey.location.latitude,
-          longitude: survey.location.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        }}
-      >
-        <Marker coordinate={survey.location} />
-      </MapView>
+      <View style={styles.mapContainer}>
+        <SafeMapView
+          style={styles.map}
+          region={{
+            latitude: survey?.location?.coordinates?.[1] || 0,
+            longitude: survey?.location?.coordinates?.[0] || 0,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          }}
+          fallbackText="Map temporarily unavailable"
+          fallbackSubText="Survey location data is still available"
+        >
+          {survey?.location?.coordinates && (
+            <Marker
+              coordinate={{
+                latitude: survey.location.coordinates[1],
+                longitude: survey.location.coordinates[0],
+              }}
+              title="Survey Location"
+              pinColor="#1976D2"
+            />
+          )}
+        </SafeMapView>
+      </View>
 
       <View style={styles.content}>
         <Text style={styles.label}>Survey Details:</Text>
@@ -105,7 +120,12 @@ export default function SurveyDetailsScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  map: { height: 300, width: '100%' },
+  mapContainer: {
+    height: 300,
+    width: '100%',
+    marginBottom: 20,
+  },
+  map: { height: '100%', width: '100%' },
   content: { padding: 16 },
   label: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
   input: {

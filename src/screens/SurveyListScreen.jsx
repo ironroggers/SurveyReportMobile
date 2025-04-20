@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Dimensions, Alert, ActivityIndicator, RefreshControl, Image } from 'react-native';
-import MapView, { Marker, Polygon } from 'react-native-maps';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Dimensions, Alert, ActivityIndicator, RefreshControl, Image, Platform } from 'react-native';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import {useCurrentUser} from "../hooks/useCurrentUser";
 import {LOCATION_URL, SURVEY_URL} from "../api-url";
+import SafeMapView from '../components/SafeMapView';
 
 // New SurveyThumbnail component
 const SurveyThumbnail = React.memo(({ thumbnailImage }) => {
@@ -378,54 +378,66 @@ export default function SurveyListScreen() {
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
-        style={[styles.map, isMapExpanded && styles.expandedMap]}
-        region={mapRegion}
-        onRegionChangeComplete={setMapRegion}
-        showsUserLocation={true}
-        showsMyLocationButton={true}
-        showsCompass={true}
-        zoomControlEnabled={true}
-      >
-        {/* Show current location marker */}
-        {currentLocation && (
-          <Marker
-            coordinate={currentLocation}
-            title="Your Location"
-            pinColor="#4CAF50"
-          />
-        )}
+      {isMapExpanded && (
+        <View style={[styles.mapContainer, isMapExpanded && styles.expandedMap]}>
+          <SafeMapView
+            style={styles.map}
+            region={mapRegion}
+            showsUserLocation={true}
+            fallbackText="Map temporarily unavailable"
+            fallbackSubText="Surveys will still be shown in list view"
+          >
+            {location?.centerPoint?.coordinates && (
+              <Marker
+                coordinate={{
+                  latitude: location.centerPoint.coordinates[1],
+                  longitude: location.centerPoint.coordinates[0],
+                }}
+                title={location.title || "Survey Location"}
+                description={`Status: ${location.status}`}
+                pinColor="#1976D2"
+              />
+            )}
 
-        {/* Show survey markers */}
-        {surveys.map((survey, index) => (
-          <Marker
-            key={`survey-${index}`}
-            coordinate={{
-              latitude: survey.terrainData.centerPoint.coordinates[1],
-              longitude: survey.terrainData.centerPoint.coordinates[0]
-            }}
-            pinColor="#1976D2"
-          />
-        ))}
+            {location?.geofence?.coordinates?.[0]?.length > 0 && (
+              <Polygon
+                coordinates={location.geofence.coordinates[0].map(([lng, lat]) => ({
+                  latitude: lat,
+                  longitude: lng,
+                }))}
+                strokeColor="#1976D2"
+                fillColor="rgba(25, 118, 210, 0.2)"
+                strokeWidth={2}
+              />
+            )}
 
-        {/* Show assigned location geofence */}
-        {location?.geofence?.coordinates[0]?.length > 0 && (
-          <Polygon
-            coordinates={location.geofence.coordinates[0].map(([lng, lat]) => ({
-              latitude: lat,
-              longitude: lng,
-            }))}
-            strokeColor="#FF0000"
-            fillColor="rgba(255,0,0,0.2)"
-            strokeWidth={2}
-          />
-        )}
-      </MapView>
+            {/* Show survey points */}
+            {surveys.map((survey) => 
+              survey?.location?.coordinates ? (
+                <Marker
+                  key={survey._id}
+                  coordinate={{
+                    latitude: survey.location.coordinates[1],
+                    longitude: survey.location.coordinates[0],
+                  }}
+                  title={`Survey #${survey.surveyNumber || 'Unknown'}`}
+                  description={`Status: ${survey.status}`}
+                  pinColor={getSurveyPinColor(survey.status)}
+                />
+              ) : null
+            )}
+          </SafeMapView>
 
-      <TouchableOpacity style={styles.zoomToggle} onPress={toggleMapSize}>
-        <Text style={styles.fabText}>{isMapExpanded ? "Minimize Map" : "Expand Map"}</Text>
-      </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.toggleMapBtn}
+            onPress={() => setIsMapExpanded(!isMapExpanded)}
+          >
+            <Text style={styles.toggleMapBtnText}>
+              {isMapExpanded ? "Collapse Map" : "Expand Map"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <TouchableOpacity style={styles.fitMarkersBtn} onPress={fitMapToMarkers}>
         <Text style={styles.fabText}>Fit All Points</Text>
@@ -674,6 +686,24 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  mapContainer: {
+    flex: 1,
+  },
+  toggleMapBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: '#1976D2',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    elevation: 4,
+    zIndex: 10,
+  },
+  toggleMapBtnText: {
+    color: '#fff',
     fontWeight: 'bold',
   },
 });
