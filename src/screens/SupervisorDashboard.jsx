@@ -19,7 +19,7 @@ import { showFeedbackForm } from '../utils/instabug';
 
 export default function SupervisorDashboard({ navigation }) {
   const { logout } = useContext(AuthContext);
-  const { currentUser, loading: userLoading } = useCurrentUser();
+  const { currentUser, loading: userLoading, fetchCurrentUser } = useCurrentUser();
   const [surveyors, setSurveyors] = useState([]);
   const [assignedLocations, setAssignedLocations] = useState({});
   const [loading, setLoading] = useState(true);
@@ -35,11 +35,29 @@ export default function SupervisorDashboard({ navigation }) {
 
   useEffect(() => {
     if (currentUser) {
-      fetchSurveyors();
-      fetchAssignedLocations();
-      getCurrentLocation();
+      loadInitialData();
+    } else if (!userLoading) {
+      // If we're not loading user data but don't have a user, show error
+      setError('User data not available. Please log in again.');
+      setLoading(false);
     }
-  }, [JSON.stringify(currentUser)]);
+  }, [currentUser, userLoading]);
+
+  const loadInitialData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        fetchSurveyors(),
+        fetchAssignedLocations(),
+        getCurrentLocation()
+      ]);
+    } catch (error) {
+      console.log('Error loading initial data:', error);
+      setError('Failed to load initial data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getCurrentLocation = async () => {
     try {
@@ -70,7 +88,7 @@ export default function SupervisorDashboard({ navigation }) {
   };
 
   const fitMapToMarkers = () => {
-    if (mapRef.current) {
+    if (mapRef?.current) {
       const points = [];
       
       // Add current location if available
@@ -80,13 +98,13 @@ export default function SupervisorDashboard({ navigation }) {
       
       // Add surveyor locations
       surveyors.forEach(surveyor => {
-        if (surveyor.location) {
-          points.push(surveyor.location);
+        if (surveyor?.location) {
+          points.push(surveyor?.location);
         }
       });
       
       if (points.length > 0) {
-        mapRef.current.fitToCoordinates(points, {
+        mapRef?.current?.fitToCoordinates(points, {
           edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
           animated: true,
         });
@@ -116,10 +134,10 @@ export default function SupervisorDashboard({ navigation }) {
       const locationMap = {};
       locations.forEach(location => {
         if (location?.assignedTo) {
-          if (!locationMap[location.assignedTo]) {
-            locationMap[location.assignedTo] = [];
+          if (!locationMap[location?.assignedTo]) {
+            locationMap[location?.assignedTo] = [];
           }
-          locationMap[location.assignedTo].push(location);
+          locationMap[location?.assignedTo].push(location);
         }
       });
 
@@ -132,47 +150,52 @@ export default function SupervisorDashboard({ navigation }) {
   };
 
   const fetchSurveyors = async () => {
+    // Set error to null at the start to clear any previous errors
+    setError(null);
+    
     try {
+      if (!currentUser || !currentUser.id) {
+        console.log('Cannot fetch surveyors: currentUser or currentUser.id is missing');
+        setError('User data incomplete. Please log in again.');
+        setSurveyors([]);
+        return;
+      }
+
       const response = await fetch(`${AUTH_URL}/api/auth/users`);
       
       if (!response.ok) {
         const errorText = await response.text();
         console.log('Error response:', errorText);
-        Alert.alert('Error', 'Failed to fetch surveyors');
+        setError('Failed to fetch surveyors');
         setSurveyors([]);
-        setLoading(false);
         return;
       }
       
       const data = await response.json();
       if (!Array.isArray(data?.data)) {
         console.log('Invalid surveyors data format:', data);
-        Alert.alert('Error', 'Invalid response format when fetching surveyors');
+        setError('Invalid response format when fetching surveyors');
         setSurveyors([]);
-        setLoading(false);
         return;
       }
       
       const surveyors = data.data.filter(user =>
         user?.role === "SURVEYOR" &&
         user?.reportingTo &&
-        user?.reportingTo._id.toString() === currentUser.id
+        user?.reportingTo?._id?.toString() === currentUser.id
       );
       
       setSurveyors(surveyors);
     } catch (err) {
-      setError('Failed to load surveyors');
       console.log('Error fetching surveyors:', err);
-      Alert.alert('Error', `Failed to fetch surveyors: ${err.message}`);
+      setError(`Failed to load surveyors: ${err.message}`);
       setSurveyors([]);
-    } finally {
-      setLoading(false);
     }
   };
 
   // Consider users with status 1 as present
   const presentSurveyors = Array.isArray(surveyors) 
-    ? surveyors.filter((s) => s.status === 1) 
+    ? surveyors.filter((s) => s?.status === 1)
     : [];
 
   const handleAssignLocation = (surveyorId) => {
@@ -211,25 +234,25 @@ export default function SupervisorDashboard({ navigation }) {
 
     return (
       <View style={styles.card}>
-        <Text style={styles.name}>{item.username}</Text>
-        <Text style={styles.email}>{item.email}</Text>
-        <Text style={styles.status}>Status: {item.status === 1 ? 'Active' : 'Inactive'}</Text>
-        <Text style={styles.lastLogin}>Last Login: {new Date(item.lastLogin).toLocaleString()}</Text>
+        <Text style={styles.name}>{item?.username}</Text>
+        <Text style={styles.email}>{item?.email}</Text>
+        <Text style={styles.status}>Status: {item?.status === 1 ? 'Active' : 'Inactive'}</Text>
+        <Text style={styles.lastLogin}>Last Login: {new Date(item?.lastLogin)?.toLocaleString()}</Text>
         
         {surveyorLocations.length > 0 ? (
           <>
             <View style={styles.locationsContainer}>
-              <Text style={styles.locationHeader}>Assigned Locations ({surveyorLocations.length}):</Text>
+              <Text style={styles.locationHeader}>Assigned Locations ({surveyorLocations?.length}):</Text>
               {surveyorLocations.map((location) => (
                 location && (
                   <View key={location._id} style={styles.locationInfo}>
-                    <Text style={styles.locationTitle}>📍 {location.title}</Text>
+                    <Text style={styles.locationTitle}>📍 {location?.title}</Text>
                     <Text style={styles.locationDetails}>
-                      Center: ({location.centerPoint?.coordinates?.[1]?.toFixed(6) || 'N/A'}, 
-                      {location.centerPoint?.coordinates?.[0]?.toFixed(6) || 'N/A'})
+                      Center: ({location?.centerPoint?.coordinates?.[1]?.toFixed(6) || 'N/A'},
+                      {location?.centerPoint?.coordinates?.[0]?.toFixed(6) || 'N/A'})
                     </Text>
-                    <Text style={styles.locationDetails}>Status: {location.status || 'N/A'}</Text>
-                    <Text style={styles.locationDetails}>Radius: {location.radius || 0}m</Text>
+                    <Text style={styles.locationDetails}>Status: {location?.status || 'N/A'}</Text>
+                    <Text style={styles.locationDetails}>Radius: {location?.radius || 0}m</Text>
                   </View>
                 )
               ))}
@@ -258,11 +281,28 @@ export default function SupervisorDashboard({ navigation }) {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    Promise.all([
-      fetchSurveyors(),
-      fetchAssignedLocations(),
-      getCurrentLocation()
-    ]).finally(() => setRefreshing(false));
+    setError(null); // Clear any errors when refreshing
+    
+    const refreshData = async () => {
+      try {
+        // First refresh user data in case it changed
+        await fetchCurrentUser();
+        
+        // Then load all other data
+        await Promise.all([
+          fetchSurveyors(),
+          fetchAssignedLocations(),
+          getCurrentLocation()
+        ]);
+      } catch (error) {
+        console.log('Error refreshing data:', error);
+        setError('Failed to refresh data. Pull down to try again.');
+      } finally {
+        setRefreshing(false);
+      }
+    };
+    
+    refreshData();
   }, [currentUser]);
 
   return (
@@ -289,23 +329,29 @@ export default function SupervisorDashboard({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {loading || userLoading ? (
         <View style={styles.centerContent}>
           <Text style={styles.loadingText}>Loading surveyors...</Text>
         </View>
       ) : error ? (
         <View style={styles.centerContent}>
           <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={onRefresh}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <>
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>{presentSurveyors.length}</Text>
+              <Text style={styles.statValue}>{presentSurveyors?.length}</Text>
               <Text style={styles.statLabel}>Active Surveyors</Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>{surveyors.length}</Text>
+              <Text style={styles.statValue}>{surveyors?.length}</Text>
               <Text style={styles.statLabel}>Total Surveyors</Text>
             </View>
           </View>
@@ -348,8 +394,8 @@ export default function SupervisorDashboard({ navigation }) {
                 s.location && (
                   <Marker
                     key={s._id}
-                    coordinate={s.location}
-                    title={s.username}
+                    coordinate={s?.location}
+                    title={s?.username}
                     description="Current Location"
                     pinColor="#1976D2"
                   />
@@ -637,5 +683,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '600',
     fontSize: 16,
+  },
+  retryButton: {
+    backgroundColor: '#1976D2',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    elevation: 2,
+    minWidth: 120,
+  },
+  retryButtonText: {
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });
