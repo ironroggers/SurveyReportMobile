@@ -308,7 +308,19 @@ export default function SurveyorDashboard({ navigation }) {
             >
               <Text style={styles.btnText}>Edit Survey</Text>
             </TouchableOpacity>
-          ) : (item.status === 'COMPLETED' || item.status === 'APPROVED') ? null : (
+          ) : (item.status === 'COMPLETED' || item.status === 'APPROVED') ? (
+            <TouchableOpacity
+              style={[styles.surveyBtn, { backgroundColor: '#FF9800' }]}
+              onPress={() => navigation.navigate('ReviewDetails', { 
+                locationId: item._id, 
+                status: item.status, 
+                reviewComment: item.reviewComment,
+                isViewOnly: true 
+              })}
+            >
+              <Text style={styles.btnText}>View Survey</Text>
+            </TouchableOpacity>
+          ) : (
             <TouchableOpacity
               style={styles.surveyBtn}
               onPress={() => handleStartSurvey(item)}
@@ -317,8 +329,21 @@ export default function SurveyorDashboard({ navigation }) {
             </TouchableOpacity>
           )
         ) : (
-          (item.status === 'COMPLETED' || item.status === 'APPROVED') ? (<Text style={styles.markNote}>Survey Completed</Text>) :
-          <Text style={styles.markNote}>Mark attendance to begin survey.</Text>
+          (item.status === 'COMPLETED' || item.status === 'APPROVED') ? (
+            <TouchableOpacity
+              style={[styles.surveyBtn, { backgroundColor: '#FF9800' }]}
+              onPress={() => navigation.navigate('ReviewDetails', { 
+                locationId: item._id, 
+                status: item.status, 
+                reviewComment: item.reviewComment,
+                isViewOnly: true 
+              })}
+            >
+              <Text style={styles.btnText}>View Survey</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.markNote}>Mark attendance to begin survey.</Text>
+          )
         )}
       </TouchableOpacity>
     );
@@ -386,7 +411,6 @@ export default function SurveyorDashboard({ navigation }) {
             ref={mapRef}
             style={styles.map}
             region={initialRegion}
-            provider="google"
             onRegionChangeComplete={region => setInitialRegion(region)}
             showsUserLocation={true}
             fallbackText="Map temporarily unavailable"

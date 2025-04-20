@@ -23,6 +23,7 @@ export default function AssignLocationScreen({ route, navigation }) {
     latitudeDelta: 0.05,
     longitudeDelta: 0.05,
   });
+  const [isDrawingPolygon, setIsDrawingPolygon] = useState(false);
 
   useEffect(() => {
     getCurrentLocation();
@@ -96,6 +97,11 @@ export default function AssignLocationScreen({ route, navigation }) {
 
   const handleMapPress = (event) => {
     const { coordinate } = event.nativeEvent;
+    
+    if (!isDrawingPolygon) {
+      setIsDrawingPolygon(true);
+    }
+    
     setPolygonPoints(prevPoints => {
       // If we already have 4 points, don't add more
       if (prevPoints.length >= 4) {
@@ -178,6 +184,7 @@ export default function AssignLocationScreen({ route, navigation }) {
         
         // Clear the form but stay on the screen to allow more assignments
         resetForm();
+        navigation.goBack();
       } else {
         Alert.alert('Error', responseData.message || 'Failed to assign location');
       }
@@ -193,13 +200,6 @@ export default function AssignLocationScreen({ route, navigation }) {
     setSelectedLocation(null);
   };
 
-  const handleFinish = () => {
-    if (route.params?.onLocationAssigned) {
-      route.params.onLocationAssigned();
-    }
-    navigation.goBack();
-  };
-
   const renderAssignedLocation = ({ item }) => (
     <View style={styles.assignedLocationCard}>
       <Text style={styles.locationTitle}>{item.title}</Text>
@@ -211,6 +211,7 @@ export default function AssignLocationScreen({ route, navigation }) {
 
   const resetPolygon = () => {
     setPolygonPoints([]);
+    setIsDrawingPolygon(false);
   };
 
   const fitMapToPoints = () => {
@@ -315,6 +316,21 @@ export default function AssignLocationScreen({ route, navigation }) {
               })}
             />
           )}
+          
+          {polygonPoints.map((point, index) => {
+            if (index === 4 && polygonPoints.length === 5) return null;
+            
+            return (
+              <Marker
+                key={`vertex-${index}`}
+                coordinate={point}
+                pinColor="#FF9800"
+                title={`Point ${index + 1}`}
+                anchor={{ x: 0.5, y: 0.5 }}
+              />
+            );
+          })}
+          
           {polygonPoints.length > 0 && (
             <Polygon
               coordinates={polygonPoints}
@@ -340,22 +356,29 @@ export default function AssignLocationScreen({ route, navigation }) {
             <Text style={styles.buttonText}>My Location</Text>
           </TouchableOpacity>
         </View>
+        
+        {isDrawingPolygon && (
+          <View style={styles.polygonProgressContainer}>
+            <Text style={styles.polygonProgress}>
+              Points: {polygonPoints.length} / 4 
+              {polygonPoints.length === 4 ? " ✓" : ""}
+            </Text>
+          </View>
+        )}
       </View>
 
       <Text style={styles.instructions}>
-        Tap on the map to draw a polygon. Connect back to the first point to complete.
+        Tap on the map to draw a polygon (4 points). Each tap will place a marker.
+        {polygonPoints.length === 0 && "\nTap to place the first point."}
+        {polygonPoints.length === 1 && "\nNow place the second point."}
+        {polygonPoints.length === 2 && "\nPlace the third point."}
+        {polygonPoints.length === 3 && "\nPlace the final point to complete the polygon."}
+        {polygonPoints.length >= 4 && "\nPolygon complete! You can now assign this location."}
       </Text>
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
           <Text style={styles.buttonText}>Assign Location</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.submitButton, styles.finishButton]} 
-          onPress={handleFinish}
-        >
-          <Text style={styles.buttonText}>Finish</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -433,6 +456,7 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     fontStyle: 'italic',
+    lineHeight: 20,
   },
   header: {
     padding: 16,
@@ -472,18 +496,16 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     padding: 16,
   },
   submitButton: {
-    flex: 1,
+    flex: 0,
     backgroundColor: '#1976D2',
     padding: 12,
     borderRadius: 8,
+    paddingHorizontal: 30,
     marginHorizontal: 8,
-  },
-  finishButton: {
-    backgroundColor: '#4CAF50',
   },
   buttonText: {
     color: '#fff',
@@ -505,5 +527,19 @@ const styles = StyleSheet.create({
   },
   currentLocationButton: {
     backgroundColor: '#4CAF50',
+  },
+  polygonProgressContainer: {
+    position: 'absolute',
+    top: 10,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  polygonProgress: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
 });

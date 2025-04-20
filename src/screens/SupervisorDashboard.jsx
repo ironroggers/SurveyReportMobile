@@ -2,7 +2,6 @@ import React, { useEffect, useState, useContext, useCallback, useRef } from 'rea
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
@@ -10,6 +9,7 @@ import {
   RefreshControl,
   ScrollView,
   Platform,
+  TextInput,
 } from 'react-native';
 import { Marker } from 'react-native-maps';
 import { AuthContext } from '../context/AuthContext';
@@ -44,6 +44,7 @@ export default function SupervisorDashboard({ navigation }) {
   const [error, setError] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [mapRegion, setMapRegion] = useState({
     latitude: 17.385,
     longitude: 78.4867,
@@ -351,13 +352,44 @@ export default function SupervisorDashboard({ navigation }) {
     }
   };
 
-  // Consider users with status 1 as present
-  const presentSurveyors = Array.isArray(surveyors) 
-    ? surveyors.filter((s) => s && s.status === 1)
+  // Function to filter surveyors based on search query
+  const getFilteredSurveyors = useCallback(() => {
+    logEvent('Filtering surveyors with query', { searchQuery });
+    
+    if (!searchQuery || searchQuery.trim() === '') {
+      return surveyors;
+    }
+    
+    const query = searchQuery.toLowerCase().trim();
+    
+    return surveyors.filter(surveyor => {
+      // Check if surveyor name matches
+      const nameMatch = surveyor?.username?.toLowerCase().includes(query) || 
+                       surveyor?.email?.toLowerCase().includes(query);
+      
+      if (nameMatch) return true;
+      
+      // Check if any of the assigned locations match
+      if (surveyor?._id && assignedLocations[surveyor._id]) {
+        return assignedLocations[surveyor._id].some(location => 
+          location?.title?.toLowerCase().includes(query)
+        );
+      }
+      
+      return false;
+    });
+  }, [surveyors, assignedLocations, searchQuery]);
+  
+  // Get filtered surveyors based on search query
+  const filteredSurveyors = getFilteredSurveyors();
+
+  // Consider users with status 1 as present (from filtered surveyors)
+  const presentSurveyors = Array.isArray(filteredSurveyors) 
+    ? filteredSurveyors.filter((s) => s && s.status === 1)
     : [];
   
   logEvent('Present surveyors count', { 
-    total: surveyors?.length || 0, 
+    total: filteredSurveyors?.length || 0, 
     active: presentSurveyors?.length || 0 
   });
 
@@ -415,97 +447,6 @@ export default function SupervisorDashboard({ navigation }) {
       );
     } catch (error) {
       logEvent('Error during logout', error);
-    }
-  };
-
-  const renderSurveyor = ({ item }) => {
-    try {
-      if (!item) {
-        logEvent('renderSurveyor: null item, returning null');
-        return null;
-      }
-      
-      logEvent('Rendering surveyor', { 
-        id: item._id, 
-        username: item.username 
-      });
-      
-      // Get array of locations for this surveyor with null checks
-      const surveyorLocations = item._id && assignedLocations && 
-                               assignedLocations[item._id] ? 
-                               assignedLocations[item._id] : [];
-      
-      logEvent('Surveyor locations', { 
-        surveyorId: item._id, 
-        locationCount: surveyorLocations?.length || 0 
-      });
-
-      return (
-        <View style={styles.card}>
-          <Text style={styles.name}>{item.username || 'Unknown'}</Text>
-          <Text style={styles.email}>{item.email || 'No email'}</Text>
-          <Text style={styles.status}>Status: {item.status === 1 ? 'Active' : 'Inactive'}</Text>
-          <Text style={styles.lastLogin}>
-            Last Login: {item.lastLogin ? new Date(item.lastLogin).toLocaleString() : 'Unknown'}
-          </Text>
-          
-          {Array.isArray(surveyorLocations) && surveyorLocations.length > 0 ? (
-            <>
-              <View style={styles.locationsContainer}>
-                <Text style={styles.locationHeader}>
-                  Assigned Locations ({surveyorLocations.length}):
-                </Text>
-                {surveyorLocations.map((location) => (
-                  location && location._id ? (
-                    <View key={location._id} style={styles.locationInfo}>
-                      <Text style={styles.locationTitle}>📍 {location.title || 'Unnamed Location'}</Text>
-                      <Text style={styles.locationDetails}>
-                        Center: ({
-                          location.centerPoint && 
-                          location.centerPoint.coordinates && 
-                          location.centerPoint.coordinates[1] ? 
-                          location.centerPoint.coordinates[1].toFixed(6) : 'N/A'
-                        },
-                        {
-                          location.centerPoint && 
-                          location.centerPoint.coordinates && 
-                          location.centerPoint.coordinates[0] ? 
-                          location.centerPoint.coordinates[0].toFixed(6) : 'N/A'
-                        })
-                      </Text>
-                      <Text style={styles.locationDetails}>Status: {location.status || 'N/A'}</Text>
-                      <Text style={styles.locationDetails}>Radius: {location.radius || 0}m</Text>
-                    </View>
-                  ) : null
-                ))}
-              </View>
-              
-              {item._id && (
-                <TouchableOpacity
-                  style={[styles.assignBtn, { marginTop: 8 }]}
-                  onPress={() => handleAssignLocation(item._id)}
-                >
-                  <Text style={styles.btnText}>Assign Another Location</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          ) : item._id ? (
-            <TouchableOpacity
-              style={styles.assignBtn}
-              onPress={() => handleAssignLocation(item._id)}
-            >
-              <Text style={styles.btnText}>Assign Location</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      );
-    } catch (error) {
-      logEvent('Error rendering surveyor', error);
-      return (
-        <View style={styles.card}>
-          <Text style={styles.errorText}>Error displaying this surveyor</Text>
-        </View>
-      );
     }
   };
 
@@ -571,177 +512,301 @@ export default function SupervisorDashboard({ navigation }) {
     presentSurveyorsCount: presentSurveyors?.length
   });
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Supervisor Dashboard</Text>
-          <Text style={styles.headerSubtitle}>
-            {currentUser && currentUser.name ? currentUser.name : 'Welcome'}
+  // Function to render a single surveyor card (previously used in FlatList)
+  const renderSurveyorCard = (item) => {
+    try {
+      if (!item) {
+        logEvent('renderSurveyorCard: null item, returning null');
+        return null;
+      }
+      
+      logEvent('Rendering surveyor', { 
+        id: item._id, 
+        username: item.username 
+      });
+      
+      // Get array of locations for this surveyor with null checks
+      const surveyorLocations = item._id && assignedLocations && 
+                               assignedLocations[item._id] ? 
+                               assignedLocations[item._id] : [];
+      
+      logEvent('Surveyor locations', { 
+        surveyorId: item._id, 
+        locationCount: surveyorLocations?.length || 0 
+      });
+
+      return (
+        <View key={item._id || Math.random().toString()} style={styles.card}>
+          <Text style={styles.name}>{item.username || 'Unknown'}</Text>
+          <Text style={styles.email}>{item.email || 'No email'}</Text>
+          <Text style={styles.status}>Status: {item.status === 1 ? 'Active' : 'Inactive'}</Text>
+          <Text style={styles.lastLogin}>
+            Last Login: {item.lastLogin ? new Date(item.lastLogin).toLocaleString() : 'Unknown'}
           </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={handleLogout}
-        >
-          <Text style={styles.logoutBtnText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.actionButtonsContainer}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.reviewBtn]}
-          onPress={() => {
-            logEvent('Review Surveys button pressed');
-            if (navigation) {
-              navigation.navigate('ReviewSurvey');
-            }
-          }}
-        >
-          <Text style={styles.actionButtonText}>📋 Review Surveys</Text>
-        </TouchableOpacity>
-      </View>
-
-      {loading || userLoading ? (
-        <View style={styles.centerContent}>
-          <Text style={styles.loadingText}>Loading surveyors...</Text>
-        </View>
-      ) : error ? (
-        <View style={styles.centerContent}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={onRefresh}
-          >
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <>
-          <View style={styles.statsContainer}>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>
-                {Array.isArray(presentSurveyors) ? presentSurveyors.length : 0}
-              </Text>
-              <Text style={styles.statLabel}>Active Surveyors</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>
-                {Array.isArray(surveyors) ? surveyors.length : 0}
-              </Text>
-              <Text style={styles.statLabel}>Total Surveyors</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={styles.feedbackButton}
-            onPress={() => {
-              logEvent('Feedback button pressed');
-              try {
-                if (typeof showFeedbackForm === 'function') {
-                  showFeedbackForm();
-                  logEvent('Feedback form opened');
-                } else {
-                  logEvent('Feedback form function not available');
-                }
-              } catch (error) {
-                logEvent('Error showing feedback form', error);
-              }
-            }}
-          >
-            <Text style={styles.feedbackButtonText}>Send Feedback</Text>
-          </TouchableOpacity>
-
-          <View style={styles.mapContainer}>
-            <SafeMapView
-              ref={mapRef}
-              style={styles.map}
-              region={mapRegion}
-              onRegionChangeComplete={(region) => {
-                if (region) {
-                  logEvent('Map region changed', region);
-                  setMapRegion(region);
-                }
-              }}
-              showsUserLocation={true}
-              showsMyLocationButton={true}
-              showsCompass={true}
-              zoomControlEnabled={true}
-              fallbackText="Map temporarily unavailable"
-              fallbackSubText={`Active surveyors: ${Array.isArray(presentSurveyors) ? presentSurveyors.length : 0}`}
-            >
-              {/* Show current location marker */}
-              {currentLocation && 
-               currentLocation.latitude && 
-               currentLocation.longitude && (
-                <Marker
-                  coordinate={currentLocation}
-                  title="Your Location"
-                  pinColor="#4CAF50"
-                />
+          
+          {Array.isArray(surveyorLocations) && surveyorLocations.length > 0 ? (
+            <>
+              <View style={styles.locationsContainer}>
+                <Text style={styles.locationHeader}>
+                  Assigned Locations ({surveyorLocations.length}):
+                </Text>
+                {surveyorLocations.map((location) => (
+                  location && location._id ? (
+                    <View key={location._id} style={styles.locationInfo}>
+                      <Text style={styles.locationTitle}>📍 {location.title || 'Unnamed Location'}</Text>
+                      <Text style={styles.locationDetails}>
+                        Center: ({
+                          location.centerPoint && 
+                          location.centerPoint.coordinates && 
+                          location.centerPoint.coordinates[1] ? 
+                          location.centerPoint.coordinates[1].toFixed(6) : 'N/A'
+                        },
+                        {
+                          location.centerPoint && 
+                          location.centerPoint.coordinates && 
+                          location.centerPoint.coordinates[0] ? 
+                          location.centerPoint.coordinates[0].toFixed(6) : 'N/A'
+                        })
+                      </Text>
+                      <Text style={styles.locationDetails}>Status: {location.status || 'N/A'}</Text>
+                      <Text style={styles.locationDetails}>Radius: {location.radius || 0}m</Text>
+                    </View>
+                  ) : null
+                ))}
+              </View>
+              
+              {item._id && (
+                <TouchableOpacity
+                  style={[styles.assignBtn, { marginTop: 8 }]}
+                  onPress={() => handleAssignLocation(item._id)}
+                >
+                  <Text style={styles.btnText}>Assign Another Location</Text>
+                </TouchableOpacity>
               )}
-
-              {/* Show surveyor markers */}
-              {Array.isArray(presentSurveyors) && presentSurveyors.map((s) => (
-                s && s._id && s.location && 
-                s.location.latitude && s.location.longitude && (
-                  <Marker
-                    key={s._id}
-                    coordinate={s.location}
-                    title={s.username || 'Unknown'}
-                    description="Current Location"
-                    pinColor="#1976D2"
-                  />
-                )
-              ))}
-            </SafeMapView>
-
-            <TouchableOpacity 
-              style={styles.fitBtn} 
-              onPress={fitMapToMarkers}
+            </>
+          ) : item._id ? (
+            <TouchableOpacity
+              style={styles.assignBtn}
+              onPress={() => handleAssignLocation(item._id)}
             >
-              <Text style={styles.btnText}>Fit All Points</Text>
+              <Text style={styles.btnText}>Assign Location</Text>
             </TouchableOpacity>
+          ) : null}
+        </View>
+      );
+    } catch (error) {
+      logEvent('Error rendering surveyor', error);
+      return (
+        <View key={Math.random().toString()} style={styles.card}>
+          <Text style={styles.errorText}>Error displaying this surveyor</Text>
+        </View>
+      );
+    }
+  };
 
-            <TouchableOpacity 
-              style={styles.locationBtn} 
-              onPress={() => {
-                logEvent('Update Location button pressed');
-                getCurrentLocation();
-              }}
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#1976D2']}
+            tintColor="#1976D2"
+          />
+        }
+      >
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <View style={styles.headerTitleContainer}>
+              <Text style={styles.headerTitle}>Supervisor Dashboard</Text>
+              <Text style={styles.headerSubtitle}>
+                {currentUser && currentUser.name ? currentUser.name : 'Welcome'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.logoutBtn}
+              onPress={handleLogout}
             >
-              <Text style={styles.btnText}>Update Location</Text>
+              <Text style={styles.logoutBtnText}>Logout</Text>
             </TouchableOpacity>
           </View>
 
-          <FlatList
-            data={Array.isArray(surveyors) ? surveyors : []}
-            keyExtractor={(item) => {
-              const key = item && item._id ? item._id : Math.random().toString();
-              logEvent('List item key generated', { id: item?._id, key });
-              return key;
-            }}
-            renderItem={renderSurveyor}
-            contentContainerStyle={{ paddingBottom: 20 }}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={['#1976D2']}
-                tintColor="#1976D2"
-              />
-            }
-            onEndReached={() => {
-              logEvent('FlatList end reached');
-            }}
-          />
-        </>
-      )}
+          <View style={styles.actionButtonsContainer}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.reviewBtn]}
+              onPress={() => {
+                logEvent('Review Surveys button pressed');
+                if (navigation) {
+                  navigation.navigate('ReviewSurvey');
+                }
+              }}
+            >
+              <Text style={styles.actionButtonText}>📋 Review Surveys</Text>
+            </TouchableOpacity>
+          </View>
+
+          {loading || userLoading ? (
+            <View style={styles.centerContent}>
+              <Text style={styles.loadingText}>Loading surveyors...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.centerContent}>
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={onRefresh}
+              >
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={styles.statsContainer}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statValue}>
+                    {Array.isArray(presentSurveyors) ? presentSurveyors.length : 0}
+                  </Text>
+                  <Text style={styles.statLabel}>Active Surveyors</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statValue}>
+                    {Array.isArray(filteredSurveyors) ? filteredSurveyors.length : 0}
+                  </Text>
+                  <Text style={styles.statLabel}>Total Surveyors</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.feedbackButton}
+                onPress={() => {
+                  logEvent('Feedback button pressed');
+                  try {
+                    if (typeof showFeedbackForm === 'function') {
+                      showFeedbackForm();
+                      logEvent('Feedback form opened');
+                    } else {
+                      logEvent('Feedback form function not available');
+                    }
+                  } catch (error) {
+                    logEvent('Error showing feedback form', error);
+                  }
+                }}
+              >
+                <Text style={styles.feedbackButtonText}>Send Feedback</Text>
+              </TouchableOpacity>
+
+              <View style={styles.mapContainer}>
+                <SafeMapView
+                  ref={mapRef}
+                  style={styles.map}
+                  region={mapRegion}
+                  onRegionChangeComplete={(region) => {
+                    if (region) {
+                      logEvent('Map region changed', region);
+                      setMapRegion(region);
+                    }
+                  }}
+                  showsUserLocation={true}
+                  showsMyLocationButton={true}
+                  showsCompass={true}
+                  zoomControlEnabled={true}
+                  fallbackText="Map temporarily unavailable"
+                  fallbackSubText={`Active surveyors: ${Array.isArray(presentSurveyors) ? presentSurveyors.length : 0}`}
+                >
+                  {/* Show current location marker */}
+                  {currentLocation && 
+                   currentLocation.latitude && 
+                   currentLocation.longitude && (
+                    <Marker
+                      coordinate={currentLocation}
+                      title="Your Location"
+                      pinColor="#4CAF50"
+                    />
+                  )}
+
+                  {/* Show surveyor markers */}
+                  {Array.isArray(presentSurveyors) && presentSurveyors.map((s) => (
+                    s && s._id && s.location && 
+                    s.location.latitude && s.location.longitude && (
+                      <Marker
+                        key={s._id}
+                        coordinate={s.location}
+                        title={s.username || 'Unknown'}
+                        description="Current Location"
+                        pinColor="#1976D2"
+                      />
+                    )
+                  ))}
+                </SafeMapView>
+
+                <TouchableOpacity 
+                  style={styles.fitBtn} 
+                  onPress={fitMapToMarkers}
+                >
+                  <Text style={styles.btnText}>Fit All Points</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.searchContainer}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search by surveyor name or location"
+                  value={searchQuery}
+                  onChangeText={text => {
+                    logEvent('Search query changed', { text });
+                    setSearchQuery(text);
+                  }}
+                  clearButtonMode="while-editing"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity 
+                    style={styles.clearButton}
+                    onPress={() => {
+                      logEvent('Clear search pressed');
+                      setSearchQuery('');
+                    }}
+                  >
+                    <Text style={styles.clearButtonText}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.surveyorsContainer}>
+                <Text style={styles.sectionTitle}>
+                  Surveyors {searchQuery ? `(${filteredSurveyors.length} results)` : ''}
+                </Text>
+                {filteredSurveyors.length > 0 ? (
+                  filteredSurveyors.map(surveyor => renderSurveyorCard(surveyor))
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>
+                      {searchQuery ? 'No surveyors found matching your search.' : 'No surveyors found.'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </>
+          )}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollViewContent: {
+    paddingBottom: 30,
+  },
   container: { 
     flex: 1, 
     backgroundColor: '#fff', 
@@ -967,16 +1032,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     elevation: 4,
   },
-  locationBtn: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: '#4CAF50',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    elevation: 4,
-  },
   feedbackButton: {
     backgroundColor: '#9C27B0',
     padding: 12,
@@ -1003,5 +1058,49 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '600',
     fontSize: 14,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
+  },
+  surveyorsContainer: {
+    marginTop: 10,
+  },
+  emptyState: {
+    padding: 20,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    color: '#666',
+    fontSize: 16,
+  },
+  searchContainer: {
+    marginBottom: 16,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    height: 50,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 10,
+    color: '#333',
+  },
+  clearButton: {
+    padding: 8,
+  },
+  clearButtonText: {
+    color: '#999',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

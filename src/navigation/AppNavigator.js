@@ -95,6 +95,13 @@ export default function AppNavigator() {
               headerTitle: 'Survey List',
             }}
           />
+          <Stack.Screen 
+            name="ReviewDetails" 
+            component={ReviewDetailsScreen}
+            options={{
+              headerTitle: 'Survey Details',
+            }}
+          />
         </>
       ) : userRole.toUpperCase() === 'SUPERVISOR' ? (
         // Supervisor Stack

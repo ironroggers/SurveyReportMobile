@@ -24,7 +24,7 @@ const windowWidth = Dimensions.get('window').width;
 const imageSize = 100; // Fixed size for thumbnails
 
 export default function ReviewDetailsScreen({ route, navigation }) {
-  const { locationId, status: initialStatus, reviewComment: initialReviewComment } = route.params;
+  const { locationId, status: initialStatus, reviewComment: initialReviewComment, isViewOnly } = route.params;
   const [location, setLocation] = useState(null);
   const [surveys, setSurveys] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -97,6 +97,21 @@ export default function ReviewDetailsScreen({ route, navigation }) {
   }, [locationId, loading]);
 
   useEffect(() => {
+    // Set navigation title based on mode
+    if (isViewOnly) {
+      navigation.setOptions({
+        headerTitle: 'View Survey Details',
+        headerRight: () => (
+          <TouchableOpacity
+            style={styles.doneButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.doneButtonText}>Done</Text>
+          </TouchableOpacity>
+        )
+      });
+    }
+    
     fetchLocationAndSurveys();
   }, []);
 
@@ -210,6 +225,11 @@ export default function ReviewDetailsScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollContainer}>
+        {isViewOnly && (
+          <View style={styles.viewOnlyBanner}>
+            <Text style={styles.viewOnlyText}>🔒 View Only Mode - This survey cannot be edited</Text>
+          </View>
+        )}
         <View style={styles.mapContainer}>
           <SafeMapView
             style={styles.map}
@@ -384,8 +404,8 @@ export default function ReviewDetailsScreen({ route, navigation }) {
         </View>
       </ScrollView>
 
-      {/* Only show action buttons if status is COMPLETED */}
-      {location.status === 'COMPLETED' && (
+      {/* Only show action buttons if status is COMPLETED and not in view-only mode */}
+      {location.status === 'COMPLETED' && !isViewOnly && (
         <View style={styles.footer}>
           <TouchableOpacity
             style={[styles.actionBtn, styles.rejectBtn]}
@@ -761,6 +781,28 @@ const styles = StyleSheet.create({
   imageStatus: {
     color: '#fff',
     fontSize: 10,
+    textAlign: 'center',
+  },
+  doneButton: {
+    padding: 8,
+    borderRadius: 5,
+  },
+  doneButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1976D2',
+  },
+  viewOnlyBanner: {
+    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FF9800',
+    alignItems: 'center',
+  },
+  viewOnlyText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FF9800',
     textAlign: 'center',
   },
 });
