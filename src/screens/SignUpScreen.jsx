@@ -46,7 +46,10 @@ export default function SignUpScreen({ navigation }) {
       if (userRole && userRole.toUpperCase() === 'SUPERVISOR') {
         try {
           // Replace instead of navigate to prevent stacking
-          navigation.replace('SupervisorDashboard');
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'SupervisorDashboard' }],
+          });
         } catch (navError) {
           console.log("Navigation error:", navError);
           Alert.alert(
@@ -56,7 +59,10 @@ export default function SignUpScreen({ navigation }) {
         }
       } else if (userRole && userRole.toUpperCase() === 'SURVEYOR') {
         try {
-          navigation.replace('SurveyorDashboard');
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'SurveyorDashboard' }],
+          });
         } catch (navError) {
           console.log("Navigation error:", navError);
           Alert.alert(

@@ -8,14 +8,24 @@ export default function RoleSelectionScreen({ navigation }) {
 
       <TouchableOpacity
         style={styles.button}
-        onPress={() => navigation.navigate('SurveyorDashboard')}
+        onPress={() => {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'SurveyorDashboard' }],
+          });
+        }}
       >
         <Text style={styles.buttonText}>Surveyor</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.button}
-        onPress={() => navigation.navigate('SupervisorDashboard')}
+        onPress={() => {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'SupervisorDashboard' }],
+          });
+        }}
       >
         <Text style={styles.buttonText}>Supervisor</Text>
       </TouchableOpacity>

@@ -273,83 +273,24 @@ export default function SupervisorDashboard({ navigation }) {
   };
 
   const fetchSurveyors = async () => {
-    logEvent('fetchSurveyors started');
-    // Set error to null at the start to clear any previous errors
-    setError(null);
-    
+    const url = `${AUTH_URL}/api/users?role=SURVEYOR`;
+    console.log("url", url);
+    logEvent('Fetching surveyors from URL', url);
     try {
-      if (!currentUser || !currentUser.id) {
-        logEvent('Cannot fetch surveyors: currentUser or currentUser.id is missing', {
-          hasCurrentUser: !!currentUser,
-          userId: currentUser?.id
-        });
-        setSurveyors([]);
-        return;
-      }
+      const response = await fetch(url);
 
-      if (!AUTH_URL) {
-        logEvent('AUTH_URL is undefined');
-        setSurveyors([]);
-        return;
-      }
-
-      const apiUrl = `${AUTH_URL}/api/auth/users`;
-      logEvent('Fetching from URL', apiUrl);
       
-      const response = await fetch(apiUrl);
-      logEvent('Response received', { 
-        ok: response?.ok, 
-        status: response?.status 
-      });
-      
-      if (!response || !response.ok) {
-        logEvent('Error response from auth API', {
-          status: response?.status,
-          statusText: response?.statusText
-        });
-        setSurveyors([]);
-        return;
+      if (!response.ok) {
+        throw new Error(`Failed to fetch surveyors: ${response.status}`);
       }
       
       const data = await response.json();
-      logEvent('Surveyors data parsed', { 
-        hasData: !!data,
-        isArray: Array.isArray(data?.data),
-        dataLength: data?.data?.length || 0
-      });
-      
-      if (!data || !Array.isArray(data.data)) {
-        logEvent('Invalid surveyors data format', data);
-        setSurveyors([]);
-        return;
-      }
-      
-      // Add null checks for filtering
-      logEvent('Filtering surveyors by reporting relationship', {
-        supervisorId: currentUser.id,
-        totalUsers: data.data.length
-      });
-      
-      const filteredSurveyors = data.data.filter(user =>
-        user && 
-        user.role === "SURVEYOR" &&
-        user.reportingTo &&
-        user.reportingTo._id &&
-        currentUser && 
-        currentUser.id && 
-        user.reportingTo._id.toString() === currentUser.id
-      );
-      
-      logEvent('Surveyors filtered', {
-        filteredCount: filteredSurveyors.length,
-        originalCount: data.data.length 
-      });
-      
-      setSurveyors(filteredSurveyors || []);
-      logEvent('Surveyors state updated');
+      logEvent('Surveyors fetched successfully', { count: data.length });
+      setSurveyors(data);
+      return data;
     } catch (err) {
       logEvent('Error fetching surveyors', err);
-      setSurveyors([]);
+      throw err;
     }
   };
 

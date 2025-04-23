@@ -1,7 +1,9 @@
 import React, { useContext } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ActivityIndicator, View, TouchableOpacity, Text } from 'react-native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { ActivityIndicator, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
+import { MaterialIcons } from '@expo/vector-icons';
 
 // Auth Screens
 import LoginScreen from '../screens/LoginScreen';
@@ -19,14 +21,125 @@ import ReviewSurveyScreen from '../screens/ReviewSurveyScreen';
 import ReviewDetailsScreen from "../screens/ReviewDetailsScreen";
 import SurveyListScreen from "../screens/SurveyListScreen";
 
+// New Tab Screens
+import LocationAssignmentScreen from '../screens/LocationAssignmentScreen';
+import SurveyScreen from '../screens/SurveyScreen';
+import MoreScreen from '../screens/MoreScreen';
+
 const Stack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator();
+
+// Supervisor Bottom Tabs
+function SupervisorTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        tabBarActiveTintColor: '#1976D2',
+        tabBarInactiveTintColor: '#757575',
+        tabBarStyle: {
+          height: 60,
+          paddingBottom: 10,
+          paddingTop: 5,
+        },
+      }}
+    >
+      <Tab.Screen 
+        name="SupervisorHome" 
+        component={SupervisorDashboard} 
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="home" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="LocationAssignment" 
+        component={LocationAssignmentScreen} 
+        options={{
+          title: 'Assignments',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="location-on" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="SurveyReview" 
+        component={ReviewSurveyScreen} 
+        options={{
+          title: 'Reviews',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="rate-review" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="SupervisorMore" 
+        component={MoreScreen} 
+        options={{
+          title: 'More',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="more-horiz" color={color} size={size} />
+          ),
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+// Surveyor Bottom Tabs
+function SurveyorTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        tabBarActiveTintColor: '#1976D2',
+        tabBarInactiveTintColor: '#757575',
+        tabBarStyle: {
+          height: 60,
+          paddingBottom: 10,
+          paddingTop: 5,
+        },
+      }}
+    >
+      <Tab.Screen 
+        name="SurveyorHome" 
+        component={SurveyorDashboard} 
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="home" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="SurveyTab" 
+        component={SurveyScreen} 
+        options={{
+          title: 'Survey',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="assignment" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="SurveyorMore" 
+        component={MoreScreen} 
+        options={{
+          title: 'More',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="more-horiz" color={color} size={size} />
+          ),
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
 
 export default function AppNavigator() {
-  const { isLoading, userToken, userInfo, logout } = useContext(AuthContext);
+  const { isLoading, userToken, userInfo } = useContext(AuthContext);
 
   // Safe access to userInfo
-  const safeUserInfo = userInfo || {};
-  const userRole = safeUserInfo.role || '';
+  const userRole = userInfo?.role || '';
 
   if (isLoading) {
     return (
@@ -36,151 +149,54 @@ export default function AppNavigator() {
     );
   }
 
-  const defaultScreenOptions = {
-    headerShown: true,
-    headerBackTitleVisible: false,
-    headerStyle: {
-      backgroundColor: '#1976D2',
-    },
-    headerTintColor: '#fff',
-    headerTitleStyle: {
-      fontWeight: 'bold',
-    },
-  };
-
   return (
-    <Stack.Navigator screenOptions={defaultScreenOptions}>
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: '#1976D2',
+        },
+        headerTintColor: '#fff',
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+      }}
+    >
       {!userToken ? (
         // Auth Stack
         <>
-          <Stack.Screen 
-            name="Login" 
-            component={LoginScreen} 
-            options={{ headerShown: false }} 
-          />
-          <Stack.Screen 
-            name="SignUp" 
-            component={SignUpScreen} 
-            options={{ headerShown: false }} 
-          />
-        </>
-      ) : userRole.toUpperCase() === 'SURVEYOR' ? (
-        // Surveyor Stack
-        <>
-          <Stack.Screen 
-            name="SurveyorDashboard" 
-            component={SurveyorDashboard} 
-            options={{ 
-              headerTitle: 'Surveyor Dashboard',
-              headerLeft: null, // Disable back button
-            }}
-          />
-          <Stack.Screen 
-            name="Attendance" 
-            component={AttendanceScreen}
-            options={{
-              headerTitle: 'Attendance',
-            }}
-          />
-          <Stack.Screen 
-            name="SurveyForm" 
-            component={SurveyFormScreen}
-            options={{
-              headerTitle: 'New Survey',
-            }}
-          />
-          <Stack.Screen 
-            name="SurveyList" 
-            component={SurveyListScreen}
-            options={{
-              headerTitle: 'Survey List',
-            }}
-          />
-          <Stack.Screen 
-            name="ReviewDetails" 
-            component={ReviewDetailsScreen}
-            options={{
-              headerTitle: 'Survey Details',
-            }}
-          />
-        </>
-      ) : userRole.toUpperCase() === 'SUPERVISOR' ? (
-        // Supervisor Stack
-        <>
-          <Stack.Screen 
-            name="SupervisorDashboard" 
-            component={SupervisorDashboard}
-            options={{ 
-              headerTitle: 'Supervisor Dashboard',
-              headerLeft: null, // Disable back button
-            }}
-          />
-          <Stack.Screen 
-            name="AssignLocation" 
-            component={AssignLocationScreen}
-            options={{
-              headerTitle: 'Assign Location',
-            }}
-          />
-          <Stack.Screen 
-            name="ReviewSurvey" 
-            component={ReviewSurveyScreen}
-            options={{
-              headerTitle: 'Review Surveys',
-            }}
-          />
-          <Stack.Screen 
-            name="ReviewDetails" 
-            component={ReviewDetailsScreen}
-            options={{
-              headerTitle: 'Survey Details',
-            }}
-          />
-          <Stack.Screen 
-            name="Attendance" 
-            component={AttendanceScreen}
-            options={{
-              headerTitle: 'Attendance',
-            }}
-          />
-          <Stack.Screen 
-            name="SupervisorAttendance" 
-            component={SupervisorAttendanceScreen}
-            options={{
-              headerTitle: 'Team Attendance',
-            }}
-          />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="SignUp" component={SignUpScreen} />
         </>
       ) : (
-        // If role is not recognized, show the role selection screen
-        <Stack.Screen
-          name="RoleSelection"
-          component={RoleSelectionScreen}
-          options={{
-            headerTitle: 'Select Role',
-            headerLeft: null, // Disable back button
-          }}
-        />
+        // App Stack - Role-based navigation
+        <>
+          {!userRole && (
+            <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} />
+          )}
+          
+          {userRole.toUpperCase() === 'SUPERVISOR' ? (
+            <Stack.Screen 
+              name="SupervisorDashboard" 
+              component={SupervisorTabs} 
+              options={{ headerShown: false }} 
+            />
+          ) : (
+            <Stack.Screen 
+              name="SurveyorDashboard" 
+              component={SurveyorTabs} 
+              options={{ headerShown: false }} 
+            />
+          )}
+          
+          {/* Common screens */}
+          <Stack.Screen name="Attendance" component={AttendanceScreen} />
+          <Stack.Screen name="SupervisorAttendance" component={SupervisorAttendanceScreen} />
+          <Stack.Screen name="SurveyForm" component={SurveyFormScreen} />
+          <Stack.Screen name="AssignLocation" component={AssignLocationScreen} />
+          <Stack.Screen name="ReviewDetails" component={ReviewDetailsScreen} />
+          <Stack.Screen name="SurveyList" component={SurveyListScreen} />
+        </>
       )}
     </Stack.Navigator>
   );
 }
-
-const styles = {
-  logoutContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoutBtn: {
-    backgroundColor: '#f44336',
-    padding: 10,
-    borderRadius: 8,
-    marginTop: 10,
-  },
-  logoutBtnText: {
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: 'bold',
-  },
-};
