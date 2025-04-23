@@ -1,34 +1,61 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ATTENDANCE_URL } from '../api-url';
 
-// Helper function to get auth token
-const getAuthToken = async () => {
+// Helper function to get the current user ID
+const getCurrentUserId = async () => {
   try {
-    const token = await AsyncStorage.getItem('userToken');
-    return token;
+    // Get user info from AsyncStorage
+    const userInfoString = await AsyncStorage.getItem('userInfo');
+    if (userInfoString) {
+      const userInfo = JSON.parse(userInfoString);
+      return userInfo.id || userInfo._id;
+    }
+    return null;
   } catch (error) {
-    console.error('Error retrieving auth token:', error);
-    throw error;
+    console.error('Error retrieving user ID:', error);
+    return null;
   }
 };
 
 // Check in for the day
 export const checkIn = async (locationData) => {
   try {
-    const token = await getAuthToken();
+    const userId = await getCurrentUserId();
+    
+    if (!userId) {
+      throw new Error('User ID not available. Please log in again.');
+    }
+    
+    // Log the request data for debugging
+    console.log('Check-in request - userId:', userId);
+    console.log('Check-in request - locationData:', JSON.stringify(locationData));
+    
+    const requestBody = { 
+      userId: userId,
+      location: locationData 
+    };
+    
+    console.log('Check-in request body:', JSON.stringify(requestBody));
+    
     const response = await fetch(`${ATTENDANCE_URL}/api/attendance/check-in`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ location: locationData })
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
       try {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to check in');
+        const errorText = await response.text();
+        console.log('Check-in error response:', errorText);
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(errorData.message || 'Failed to check in');
+        } catch (parseError) {
+          throw new Error(`Failed to check in. Status: ${response.status}. Response: ${errorText.substring(0, 100)}`);
+        }
       } catch (jsonError) {
         throw new Error(`Failed to check in. Status: ${response.status}`);
       }
@@ -44,20 +71,24 @@ export const checkIn = async (locationData) => {
 // Check out for the day
 export const checkOut = async (locationData, attendanceId = null) => {
   try {
-    const token = await getAuthToken();
+    const userId = await getCurrentUserId();
+    
+    if (!userId) {
+      throw new Error('User ID not available. Please log in again.');
+    }
     
     // If attendanceId is provided, it's an auto-checkout for a specific record
-    const endpoint = attendanceId 
+    let endpoint = attendanceId 
       ? `${ATTENDANCE_URL}/api/attendance/check-out/${attendanceId}` 
       : `${ATTENDANCE_URL}/api/attendance/check-out`;
     
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({ 
+        userId: userId,
         location: locationData,
         isAutoCheckout: Boolean(attendanceId)
       })
@@ -82,12 +113,14 @@ export const checkOut = async (locationData, attendanceId = null) => {
 // Get today's attendance status
 export const getTodayAttendance = async () => {
   try {
-    const token = await getAuthToken();
-    const response = await fetch(`${ATTENDANCE_URL}/api/attendance/today`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+    const userId = await getCurrentUserId();
+    
+    if (!userId) {
+      throw new Error('User ID not available. Please log in again.');
+    }
+    
+    const response = await fetch(`${ATTENDANCE_URL}/api/attendance/today?userId=${userId}`, {
+      method: 'GET'
     });
 
     if (!response.ok) {
@@ -109,8 +142,16 @@ export const getTodayAttendance = async () => {
 // Get attendance history with optional filters
 export const getAttendanceHistory = async (filters = {}) => {
   try {
-    const token = await getAuthToken();
+    const userId = await getCurrentUserId();
+    
+    if (!userId) {
+      throw new Error('User ID not available. Please log in again.');
+    }
+    
     const queryParams = new URLSearchParams();
+    
+    // Add userId parameter
+    queryParams.append('userId', userId);
     
     // Add filters to query params if provided
     if (filters.startDate) queryParams.append('startDate', filters.startDate);
@@ -120,10 +161,7 @@ export const getAttendanceHistory = async (filters = {}) => {
     const url = `${ATTENDANCE_URL}/api/attendance/history?${queryParams.toString()}`;
     
     const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+      method: 'GET'
     });
 
     if (!response.ok) {
@@ -145,14 +183,19 @@ export const getAttendanceHistory = async (filters = {}) => {
 // Submit justification for absence
 export const submitJustification = async (attendanceId, justification, isOnDuty = false) => {
   try {
-    const token = await getAuthToken();
+    const userId = await getCurrentUserId();
+    
+    if (!userId) {
+      throw new Error('User ID not available. Please log in again.');
+    }
+    
     const response = await fetch(`${ATTENDANCE_URL}/api/attendance/justify`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({ 
+        userId: userId,
         attendanceId, 
         justification,
         isOnDuty 
@@ -181,4 +224,4 @@ export default {
   getTodayAttendance,
   getAttendanceHistory,
   submitJustification
-}; 
+};
