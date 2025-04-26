@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
-import attendanceApi from '../api/attendanceApi';
 import AttendanceActions from '../components/AttendanceActions';
 import AttendanceItem from '../components/AttendanceItem';
 import AttendanceCalendar from '../components/AttendanceCalendar';

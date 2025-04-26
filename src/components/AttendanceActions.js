@@ -171,9 +171,22 @@ const AttendanceActions = ({ onActionComplete }) => {
     );
   }
 
-  const hasCheckedIn = Boolean(todayAttendance?.checkInTime);
-  const hasCheckedOut = Boolean(todayAttendance?.checkOutTime);
-  
+  // Derive sessions and open-session state
+  const sessions = todayAttendance?.sessions || [];
+  const lastSession = sessions[sessions.length - 1];
+  const isOpenSession = Boolean(lastSession && !lastSession.checkOutTime);
+  // Aggregate hours: prefer backend workHours or sum of completed sessions
+  const aggregatedWorkHours = typeof todayAttendance?.workHours === 'number'
+    ? todayAttendance.workHours
+    : sessions.reduce((sum, s) => {
+        if (s.checkInTime && s.checkOutTime) {
+          const inT = new Date(s.checkInTime);
+          const outT = new Date(s.checkOutTime);
+          return sum + (outT - inT) / (1000 * 60 * 60);
+        }
+        return sum;
+      }, 0);
+
   const formatTime = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -186,48 +199,50 @@ const AttendanceActions = ({ onActionComplete }) => {
         <Text style={styles.title}>Today's Attendance</Text>
         
         {!todayAttendance ? (
-          <Text style={styles.noRecordText}>No attendance record for today yet.</Text>
+          <Text style={styles.noRecordText}>
+            No attendance record for today yet.
+          </Text>
         ) : (
           <View style={styles.attendanceInfo}>
-            {hasCheckedIn && (
-              <View style={styles.timeInfo}>
-                <MaterialIcons name="login" size={20} color="#4CAF50" />
-                <Text style={styles.timeLabel}>Checked In:</Text>
-                <Text style={styles.timeValue}>{formatTime(todayAttendance.checkInTime)}</Text>
-              </View>
+            {sessions.length === 0 && (
+              <Text style={styles.noRecordText}>
+                No sessions yet for today.
+              </Text>
             )}
-            
-            {hasCheckedOut && (
-              <View style={styles.timeInfo}>
-                <MaterialIcons name="logout" size={20} color="#F44336" />
-                <Text style={styles.timeLabel}>Checked Out:</Text>
-                <Text style={styles.timeValue}>{formatTime(todayAttendance.checkOutTime)}</Text>
+            {sessions.map((session, idx) => (
+              <View key={idx} style={styles.sessionRow}>
+                <Text style={styles.sessionLabel}>Session {idx + 1}</Text>
+                <View style={styles.timeInfo}>
+                  <MaterialIcons name="login" size={20} color="#4CAF50" />
+                  <Text style={styles.timeLabel}>In:</Text>
+                  <Text style={styles.timeValue}>{formatTime(session.checkInTime)}</Text>
+                </View>
+                <View style={styles.timeInfo}>
+                  <MaterialIcons name="logout" size={20} color="#F44336" />
+                  <Text style={styles.timeLabel}>Out:</Text>
+                  <Text style={styles.timeValue}>{formatTime(session.checkOutTime)}</Text>
+                </View>
               </View>
-            )}
-            
-            {todayAttendance.workHours !== undefined && (
-              <View style={styles.timeInfo}>
-                <MaterialIcons name="access-time" size={20} color="#1976D2" />
-                <Text style={styles.timeLabel}>Work Hours:</Text>
-                <Text style={styles.timeValue}>
-                  {todayAttendance.workHours?.toFixed(2) || 'N/A'} hrs
-                </Text>
-              </View>
-            )}
+            ))}
+            <View style={styles.timeInfo}>
+              <MaterialIcons name="access-time" size={20} color="#1976D2" />
+              <Text style={styles.timeLabel}>Total Hrs:</Text>
+              <Text style={styles.timeValue}>{aggregatedWorkHours.toFixed(2)} hrs</Text>
+            </View>
           </View>
         )}
         
         <View style={styles.actionButtons}>
           <TouchableOpacity 
             style={[
-              styles.actionButton, 
+              styles.actionButton,
               styles.checkInButton,
-              (hasCheckedIn && { opacity: 0.5 })
+              isOpenSession && { opacity: 0.5 }
             ]}
             onPress={handleCheckIn}
-            disabled={hasCheckedIn || actionLoading}
+            disabled={isOpenSession || actionLoading}
           >
-            {actionLoading && !hasCheckedIn ? (
+            {actionLoading && !isOpenSession ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <>
@@ -239,14 +254,14 @@ const AttendanceActions = ({ onActionComplete }) => {
           
           <TouchableOpacity 
             style={[
-              styles.actionButton, 
+              styles.actionButton,
               styles.checkOutButton,
-              (!hasCheckedIn || hasCheckedOut) && { opacity: 0.5 }
+              !isOpenSession && { opacity: 0.5 }
             ]}
             onPress={handleCheckOut}
-            disabled={!hasCheckedIn || hasCheckedOut || actionLoading}
+            disabled={!isOpenSession || actionLoading}
           >
-            {actionLoading && hasCheckedIn && !hasCheckedOut ? (
+            {actionLoading && isOpenSession ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <>
@@ -344,6 +359,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  sessionRow: {
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingBottom: 8,
+  },
+  sessionLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
   },
 });
 

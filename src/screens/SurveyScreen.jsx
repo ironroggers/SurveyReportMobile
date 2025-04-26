@@ -21,13 +21,14 @@ export default function SurveyScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const {currentUser} = useCurrentUser();
+  console.log("Current User:", currentUser);
   
   // Load data when currentUser is available
   useEffect(() => {
-    if (currentUser?.id) {
+    if (currentUser?._id) {
       fetchData();
     }
-  }, [currentUser?.id]);
+  }, [currentUser]);
   
   // Fetch surveyors data
   const fetchSurveyors = async () => {
@@ -41,7 +42,8 @@ export default function SurveyScreen({ navigation }) {
       setLoading(true);
       
       // Correctly use the currentUser's reportingTo field
-      const apiUrl = `${AUTH_URL}/api/auth/users?reportingTo=${currentUser.reportingTo}`;
+      console.log("Loading surveyors----------44", currentUser);
+      const apiUrl = `${AUTH_URL}/api/auth/users?reportingTo=${currentUser?._id}`;
       console.log("api-url ", apiUrl);
       
       const response = await fetch(apiUrl);
@@ -53,6 +55,8 @@ export default function SurveyScreen({ navigation }) {
       }
 
       const data = await response.json();
+
+      console.log("Successfully fetch surveyors data", data);
       setSurveyors(Array.isArray(data?.data) ? data?.data : []);
     } catch (err) {
       console.error("Error fetching surveyors:", err);
@@ -66,7 +70,7 @@ export default function SurveyScreen({ navigation }) {
   // Fetch locations
   const fetchLocations = async () => {
     try {
-      if (!LOCATION_URL || !currentUser?.id) {
+      if (!LOCATION_URL || !currentUser?._id) {
         console.log("Cannot fetch locations: Missing LOCATION_URL or user ID");
         setLocations([]);
         return;
@@ -75,7 +79,7 @@ export default function SurveyScreen({ navigation }) {
       console.log("Starting to fetch locations");
       
       // Include the createdBy and status parameters as shown in the logs
-      const apiUrl = `${LOCATION_URL}/api/locations?createdBy=${currentUser.id}&status=COMPLETED,APPROVED,REJECTED`;
+      const apiUrl = `${LOCATION_URL}/api/locations?createdBy=${currentUser._id}&status=COMPLETED,APPROVED,REJECTED`;
       console.log("Fetching locations from URL:", apiUrl);
       
       const response = await fetch(apiUrl);
@@ -102,7 +106,7 @@ export default function SurveyScreen({ navigation }) {
   const fetchData = async () => {
     setError(null);
     
-    if (!currentUser?.id) {
+    if (!currentUser?._id) {
       console.log("Cannot fetch data: currentUser not loaded yet");
       return;
     }
@@ -114,7 +118,7 @@ export default function SurveyScreen({ navigation }) {
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchData().finally(() => setRefreshing(false));
-  }, [currentUser?.id]);
+  }, [currentUser?._id]);
 
   // Get filtered surveyors based on search query
   const getFilteredSurveyors = useCallback(() => {

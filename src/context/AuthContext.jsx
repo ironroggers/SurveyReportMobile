@@ -22,6 +22,7 @@ export const AuthProvider = ({ children }) => {
           password,
         }),
       });
+      console.log("Logging the login response : ",response);
 
       const data = await response.json();
 

@@ -32,7 +32,7 @@ export default function ReviewSurveyScreen({ navigation }) {
   ];
 
   const fetchLocations = useCallback(async () => {
-    if (!currentUser?.id) {
+    if (!currentUser?._id) {
       console.log('Cannot fetch locations: no current user ID');
       return;
     }
@@ -40,7 +40,7 @@ export default function ReviewSurveyScreen({ navigation }) {
     try {
       console.log('Starting to fetch locations');
       setLoading(true);
-      const url = `${LOCATION_URL}/api/locations?createdBy=${currentUser.id}&status=COMPLETED,APPROVED,REJECTED`;
+      const url = `${LOCATION_URL}/api/locations?createdBy=${currentUser._id}&status=COMPLETED,APPROVED,REJECTED`;
       console.log('Fetching locations from URL:', url);
 
       const response = await fetch(url);
@@ -61,7 +61,7 @@ export default function ReviewSurveyScreen({ navigation }) {
       console.log('Finished location fetch, setting loading to false');
       setLoading(false);
     }
-  }, [currentUser?.id]);
+  }, [currentUser?._id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -74,10 +74,10 @@ export default function ReviewSurveyScreen({ navigation }) {
   }, [fetchLocations]);
 
   useEffect(() => {
-    if (!userLoading && currentUser?.id) {
+    if (!userLoading && currentUser?._id) {
       fetchLocations();
     }
-  }, [userLoading, currentUser?.id, fetchLocations]);
+  }, [userLoading, currentUser?._id, fetchLocations]);
 
   const getStatusColor = (status) => {
     switch (status) {
