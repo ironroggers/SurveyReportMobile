@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,6 @@ import {
   TextInput,
 } from 'react-native';
 import { Marker } from 'react-native-maps';
-import { AuthContext } from '../context/AuthContext';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import * as Location from 'expo-location';
 import {LOCATION_URL, AUTH_URL} from "../api-url";
@@ -33,7 +32,6 @@ const logEvent = (eventName, data = null) => {
 export default function SupervisorDashboard({ navigation }) {
   logEvent('Component Mounted');
   
-  const { logout } = useContext(AuthContext);
   const { currentUser, loading: userLoading, fetchCurrentUser } = useCurrentUser();
   
   logEvent('Current User', currentUser);
@@ -273,7 +271,7 @@ export default function SupervisorDashboard({ navigation }) {
   };
 
   const fetchSurveyors = async () => {
-    const url = `${AUTH_URL}/api/users?role=SURVEYOR`;
+    const url = `${AUTH_URL}/api/auth/users?role=SURVEYOR`;
     console.log("url", url);
     logEvent('Fetching surveyors from URL', url);
     try {
@@ -285,9 +283,9 @@ export default function SupervisorDashboard({ navigation }) {
       }
       
       const data = await response.json();
-      logEvent('Surveyors fetched successfully', { count: data.length });
-      setSurveyors(data);
-      return data;
+      logEvent('Surveyors fetched successfully', data);
+      setSurveyors(data?.data);
+      return data?.data;
     } catch (err) {
       logEvent('Error fetching surveyors', err);
       throw err;
@@ -358,37 +356,6 @@ export default function SupervisorDashboard({ navigation }) {
       });
     } catch (error) {
       logEvent('Error navigating to AssignLocation', error);
-    }
-  };
-
-  const handleLogout = () => {
-    logEvent('handleLogout called');
-    try {
-      Alert.alert(
-        'Logout',
-        'Are you sure you want to logout?',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => logEvent('Logout canceled')
-          },
-          {
-            text: 'Logout',
-            onPress: () => {
-              logEvent('Logout confirmed');
-              if (typeof logout === 'function') {
-                logout();
-                logEvent('Logout function called');
-              } else {
-                logEvent('Logout function not available');
-              }
-            }
-          }
-        ]
-      );
-    } catch (error) {
-      logEvent('Error during logout', error);
     }
   };
 
@@ -581,29 +548,7 @@ export default function SupervisorDashboard({ navigation }) {
                 <MaterialIcons name="access-time" size={24} color="#fff" />
                 <Text style={styles.attendanceButtonText}>Attendance</Text>
               </TouchableOpacity>
-            
-              <TouchableOpacity 
-                style={styles.logoutButton}
-                onPress={handleLogout}
-              >
-                <MaterialIcons name="logout" size={24} color="#F44336" />
-                <Text style={styles.logoutButtonText}>Logout</Text>
-              </TouchableOpacity>
             </View>
-          </View>
-
-          <View style={styles.actionButtonsContainer}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.reviewBtn]}
-              onPress={() => {
-                logEvent('Review Surveys button pressed');
-                if (navigation) {
-                  navigation.navigate('ReviewSurvey');
-                }
-              }}
-            >
-              <Text style={styles.actionButtonText}>📋 Review Surveys</Text>
-            </TouchableOpacity>
           </View>
 
           {loading || userLoading ? (
@@ -636,25 +581,6 @@ export default function SupervisorDashboard({ navigation }) {
                   <Text style={styles.statLabel}>Total Surveyors</Text>
                 </View>
               </View>
-
-              <TouchableOpacity
-                style={styles.feedbackButton}
-                onPress={() => {
-                  logEvent('Feedback button pressed');
-                  try {
-                    if (typeof showFeedbackForm === 'function') {
-                      showFeedbackForm();
-                      logEvent('Feedback form opened');
-                    } else {
-                      logEvent('Feedback form function not available');
-                    }
-                  } catch (error) {
-                    logEvent('Error showing feedback form', error);
-                  }
-                }}
-              >
-                <Text style={styles.feedbackButtonText}>Send Feedback</Text>
-              </TouchableOpacity>
 
               <View style={styles.mapContainer}>
                 <SafeMapView
@@ -706,45 +632,6 @@ export default function SupervisorDashboard({ navigation }) {
                 >
                   <Text style={styles.btnText}>Fit All Points</Text>
                 </TouchableOpacity>
-              </View>
-
-              <View style={styles.searchContainer}>
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search by surveyor name or location"
-                  value={searchQuery}
-                  onChangeText={text => {
-                    logEvent('Search query changed', { text });
-                    setSearchQuery(text);
-                  }}
-                  clearButtonMode="while-editing"
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity 
-                    style={styles.clearButton}
-                    onPress={() => {
-                      logEvent('Clear search pressed');
-                      setSearchQuery('');
-                    }}
-                  >
-                    <Text style={styles.clearButtonText}>✕</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <View style={styles.surveyorsContainer}>
-                <Text style={styles.sectionTitle}>
-                  Surveyors {searchQuery ? `(${filteredSurveyors.length} results)` : ''}
-                </Text>
-                {filteredSurveyors.length > 0 ? (
-                  filteredSurveyors.map(surveyor => renderSurveyorCard(surveyor))
-                ) : (
-                  <View style={styles.emptyState}>
-                    <Text style={styles.emptyStateText}>
-                      {searchQuery ? 'No surveyors found matching your search.' : 'No surveyors found.'}
-                    </Text>
-                  </View>
-                )}
               </View>
             </>
           )}
@@ -816,51 +703,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 6,
   },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFEBEE',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 20,
-    marginLeft: 8,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: '#F44336',
-  },
-  logoutButtonText: {
-    color: '#F44336',
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 6,
-  },
-  actionButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  actionButton: {
-    flex: 1,
-    padding: 15,
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  actionButtonText: {
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  reviewBtn: {
-    backgroundColor: '#FF9800',
-  },
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -893,7 +735,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   mapContainer: {
-    height: 300,
+    height: 500,
     marginBottom: 20,
     borderRadius: 12,
     overflow: 'hidden',
@@ -1030,19 +872,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 20,
     elevation: 4,
-  },
-  feedbackButton: {
-    backgroundColor: '#9C27B0',
-    padding: 12,
-    borderRadius: 8,
-    marginHorizontal: 16,
-    marginBottom: 16,
-  },
-  feedbackButtonText: {
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: '600',
-    fontSize: 16,
   },
   retryButton: {
     backgroundColor: '#1976D2',

@@ -52,7 +52,7 @@ export default function LocationAssignmentScreen({ navigation }) {
       // Fetch surveyors - using the correct endpoint
       console.log("Fetching surveyors");
       // Try the endpoint that works in SupervisorDashboard
-      const surveyorsResponse = await fetch(`${AUTH_URL}/api/users?role=SURVEYOR`);
+      const surveyorsResponse = await fetch(`${AUTH_URL}/api/auth/users?role=SURVEYOR`);
       
       if (!surveyorsResponse.ok) {
         throw new Error(`Failed to fetch surveyors: ${surveyorsResponse.status}`);
@@ -88,7 +88,7 @@ export default function LocationAssignmentScreen({ navigation }) {
   };
   
   // Filter surveyors based on search query
-  const filteredSurveyors = surveyors.filter(surveyor => {
+  const filteredSurveyors = surveyors?.filter(surveyor => {
     if (!searchQuery) return true;
     
     const query = searchQuery.toLowerCase();

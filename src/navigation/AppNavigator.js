@@ -55,7 +55,7 @@ function SupervisorTabs() {
       />
       <Tab.Screen 
         name="LocationAssignment" 
-        component={LocationAssignmentScreen} 
+        component={SurveyScreen}
         options={{
           title: 'Assignments',
           tabBarIcon: ({ color, size }) => (
@@ -112,10 +112,10 @@ function SurveyorTabs() {
         }}
       />
       <Tab.Screen 
-        name="SurveyTab" 
+        name="AssignmentTab" 
         component={SurveyScreen} 
         options={{
-          title: 'Survey',
+          title: 'Assignment',
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="assignment" color={color} size={size} />
           ),
