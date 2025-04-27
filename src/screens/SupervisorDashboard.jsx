@@ -105,6 +105,17 @@ const SupervisorDashboard = React.memo(({ navigation }) => {
     // Empty dependency array ensures this only runs once
   }, [currentUser, userLoading]);
 
+  // Additional effect to reload data when currentUser changes
+  useEffect(() => {
+    if (currentUser && currentUser._id) {
+      logEvent('Current user changed, reloading data', {
+        userId: currentUser._id,
+        username: currentUser.username
+      });
+      loadInitialData();
+    }
+  }, [currentUser, loadInitialData]);
+
   const loadInitialData = useCallback(async () => {
     logEvent('loadInitialData started');
     setLoading(true);
@@ -139,7 +150,7 @@ const SupervisorDashboard = React.memo(({ navigation }) => {
       logEvent('Setting loading to false');
       setLoading(false);
     }
-  }, []);
+  }, [fetchSurveyors, checkSurveyorsAttendance, fetchAssignedLocations]);
 
   const fetchAssignedLocations = useCallback(async () => {
     logEvent('fetchAssignedLocations started');
@@ -259,15 +270,31 @@ const SupervisorDashboard = React.memo(({ navigation }) => {
       const response = await fetch(url);
       
       if (!response.ok) {
+        logEvent('Error response from surveyors API', {
+          status: response?.status,
+          statusText: response?.statusText
+        });
         throw new Error(`Failed to fetch surveyors: ${response.status}`);
       }
       
       const data = await response.json();
-      logEvent('Surveyors fetched successfully', data);
-      setSurveyors(data?.data);
-      return data?.data;
+      logEvent('Surveyors fetched successfully', {
+        dataExists: !!data,
+        dataLength: data?.data?.length || 0,
+        reportingToId: currentUser._id
+      });
+      
+      if (!data || !Array.isArray(data.data)) {
+        logEvent('Invalid surveyors data format', data);
+        setSurveyors([]);
+        return [];
+      }
+      
+      setSurveyors(data.data);
+      return data.data;
     } catch (err) {
       logEvent('Error fetching surveyors', err);
+      setSurveyors([]);
       throw err;
     }
   }, [currentUser]);
@@ -450,12 +477,20 @@ const SupervisorDashboard = React.memo(({ navigation }) => {
             await fetchCurrentUser();
           }
           
+          if (!currentUser || !currentUser._id) {
+            logEvent('Still no currentUser after refresh', currentUser);
+            setError('User data not available. Please try again later.');
+            setRefreshing(false);
+            return;
+          }
+          
           // Now load all dashboard data
           await loadInitialData();
           
           logEvent('Refresh completed successfully');
         } catch (error) {
           logEvent('Error refreshing data', error);
+          setError(`Failed to refresh: ${error.message}`);
         } finally {
           logEvent('Setting refreshing to false');
           setRefreshing(false);
@@ -465,9 +500,10 @@ const SupervisorDashboard = React.memo(({ navigation }) => {
       refreshData();
     } catch (error) {
       logEvent('Error in onRefresh', error);
+      setError(`Refresh error: ${error.message}`);
       setRefreshing(false);
     }
-  }, [loadInitialData, fetchCurrentUser]); // Minimal dependencies
+  }, [loadInitialData, fetchCurrentUser, currentUser]);
 
   // Add a function to navigate to personal attendance
   const navigateToAttendance = useCallback(() => {
