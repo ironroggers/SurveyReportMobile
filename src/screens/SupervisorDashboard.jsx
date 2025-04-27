@@ -34,18 +34,7 @@ const logEvent = (eventName, data = null) => {
 // Track render count to identify excessive re-rendering
 let renderCount = 0;
 
-// Function to get status name from status code
-const getStatusName = (statusCode) => {
-  switch (statusCode) {
-    case 1: return 'Released';
-    case 2: return 'Assigned';
-    case 3: return 'Active';
-    case 4: return 'Completed';
-    case 5: return 'Accepted';
-    case 6: return 'Reverted';
-    default: return 'Unknown';
-  }
-};
+
 
 // Wrap component with memo to prevent unnecessary re-renders
 const SupervisorDashboard = React.memo(({ navigation }) => {
@@ -70,8 +59,6 @@ const SupervisorDashboard = React.memo(({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-
   // One-time initialization effect with no dependencies
   useEffect(() => {
     logEvent('Initial useEffect triggered (one-time)');
@@ -360,36 +347,9 @@ const SupervisorDashboard = React.memo(({ navigation }) => {
     }
   };
 
-  // Function to filter surveyors based on search query
-  const getFilteredSurveyors = useCallback(() => {
-    logEvent('Filtering surveyors with query', { searchQuery });
-    
-    if (!searchQuery || searchQuery.trim() === '') {
-      return surveyors;
-    }
-    
-    const query = searchQuery.toLowerCase().trim();
-    
-    return surveyors.filter(surveyor => {
-      // Check if surveyor name matches
-      const nameMatch = surveyor?.username?.toLowerCase().includes(query) || 
-                       surveyor?.email?.toLowerCase().includes(query);
-      
-      if (nameMatch) return true;
-      
-      // Check if any of the assigned locations match
-      if (surveyor?._id && assignedLocations[surveyor._id]) {
-        return assignedLocations[surveyor._id].some(location => 
-          location?.title?.toLowerCase().includes(query)
-        );
-      }
-      
-      return false;
-    });
-  }, [surveyors, assignedLocations, searchQuery]);
   
   // Get filtered surveyors based on search query
-  const filteredSurveyors = useMemo(() => getFilteredSurveyors(), [getFilteredSurveyors]);
+  const filteredSurveyors = useMemo(() => surveyors, [surveyors]);
 
   // Consider users as present based on attendance API
   const presentSurveyors = useMemo(() => 
@@ -509,137 +469,6 @@ const SupervisorDashboard = React.memo(({ navigation }) => {
   const navigateToAttendance = useCallback(() => {
     navigation.navigate('Attendance');
   }, [navigation]);
-
-  // Function to render a single surveyor card - updated with attendance info
-  const renderSurveyorCard = useCallback((item) => {
-    try {
-      if (!item) {
-        logEvent('renderSurveyorCard: null item, returning null');
-        return null;
-      }
-      
-      logEvent('Rendering surveyor', { 
-        id: item._id, 
-        username: item.username 
-      });
-      
-      // Get array of locations for this surveyor with null checks
-      const surveyorLocations = item._id && assignedLocations && 
-                               assignedLocations[item._id] ? 
-                               assignedLocations[item._id] : [];
-      
-      // Get attendance information
-      const attendanceInfo = item._id && surveyorAttendance[item._id];
-      const isPresent = attendanceInfo && attendanceInfo.isPresent;
-      const currentSession = attendanceInfo && attendanceInfo.currentSession;
-      
-      logEvent('Surveyor attendance info', {
-        surveyorId: item._id,
-        isPresent: isPresent,
-        hasSession: !!currentSession
-      });
-      
-      return (
-        <View key={item._id || Math.random().toString()} style={styles.card}>
-          <Text style={styles.name}>{item.username || 'Unknown'}</Text>
-          <Text style={styles.email}>{item.email || 'No email'}</Text>
-          
-          {/* Updated status with attendance information */}
-          <View style={styles.statusContainer}>
-            <Text style={styles.statusLabel}>Status: </Text>
-            <View style={[
-              styles.statusBadge, 
-              { backgroundColor: isPresent ? '#4CAF50' : '#F44336' }
-            ]}>
-              <Text style={styles.statusBadgeText}>{isPresent ? 'Present' : 'Absent'}</Text>
-            </View>
-          </View>
-          
-          {/* Show current session details if present */}
-          {isPresent && currentSession && (
-            <View style={styles.sessionInfo}>
-              <Text style={styles.sessionDetail}>
-                Checked in: {new Date(currentSession.checkInTime).toLocaleTimeString()}
-              </Text>
-              <Text style={styles.sessionDetail}>
-                Duration: {currentSession.duration || 0} minutes
-              </Text>
-            </View>
-          )}
-          
-          <Text style={styles.lastLogin}>
-            Last Login: {item.lastLogin ? new Date(item.lastLogin).toLocaleString() : 'Unknown'}
-          </Text>
-          
-          {/* Rest of the card content remains the same */}
-          {Array.isArray(surveyorLocations) && surveyorLocations.length > 0 ? (
-            <>
-              <View style={styles.locationsContainer}>
-                <Text style={styles.locationHeader}>
-                  Assigned Locations ({surveyorLocations.length}):
-                </Text>
-                {surveyorLocations.map((location) => (
-                  location && location._id ? (
-                    <View key={location._id} style={styles.locationInfo}>
-                      <Text style={styles.locationTitle}>📍 {location.title || 'Unnamed Location'}</Text>
-                      <Text style={styles.locationDetails}>
-                        Center: ({
-                          location.centerPoint && 
-                          location.centerPoint.coordinates && 
-                          location.centerPoint.coordinates[1] ? 
-                          location.centerPoint.coordinates[1].toFixed(6) : 'N/A'
-                        },
-                        {
-                          location.centerPoint && 
-                          location.centerPoint.coordinates && 
-                          location.centerPoint.coordinates[0] ? 
-                          location.centerPoint.coordinates[0].toFixed(6) : 'N/A'
-                        })
-                      </Text>
-                      <Text style={styles.locationDetails}>Status: {location.status !== undefined ? getStatusName(location.status) : 'N/A'}</Text>
-                      <Text style={styles.locationDetails}>Radius: {location.radius || 0}m</Text>
-                    </View>
-                  ) : null
-                ))}
-              </View>
-              
-              {item._id && (
-                <TouchableOpacity
-                  style={[styles.assignBtn, { marginTop: 8 }]}
-                  onPress={() => handleAssignLocation(item._id)}
-                >
-                  <Text style={styles.btnText}>Assign Another Location</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          ) : item._id ? (
-            <TouchableOpacity
-              style={styles.assignBtn}
-              onPress={() => handleAssignLocation(item._id)}
-            >
-              <Text style={styles.btnText}>Assign Location</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      );
-    } catch (error) {
-      logEvent('Error rendering surveyor', error);
-      return (
-        <View key={Math.random().toString()} style={styles.card}>
-          <Text style={styles.errorText}>Error displaying this surveyor</Text>
-        </View>
-      );
-    }
-  }, [assignedLocations, handleAssignLocation, surveyorAttendance]);
-
-  // Log when render is called
-  logEvent('Rendering component, returning JSX', {
-    loading,
-    userLoading,
-    hasError: !!error,
-    surveyorsCount: surveyors?.length,
-    presentSurveyorsCount: presentSurveyors?.length
-  });
 
   return (
     <SafeAreaView style={styles.safeArea}>
