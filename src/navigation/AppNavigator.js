@@ -129,7 +129,7 @@ function SurveyorTabs() {
         options={{
           title: 'Attendance',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="clock" color={color} size={size} />
+            <MaterialIcons name="access-time" color={color} size={size} />
           ),
         }}
       />

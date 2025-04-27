@@ -53,6 +53,8 @@ const SupervisorDashboard = React.memo(({ navigation }) => {
   logEvent(`Rendering component (count: ${renderCount})`);
   
   const { currentUser, loading: userLoading, fetchCurrentUser } = useCurrentUser();
+
+  console.log("Current user", currentUser);
   
   const [surveyors, setSurveyors] = useState([]);
   const [assignedLocations, setAssignedLocations] = useState({});
@@ -620,9 +622,9 @@ const SupervisorDashboard = React.memo(({ navigation }) => {
         <View style={styles.container}>
           <View style={styles.header}>
             <View style={styles.headerTitleContainer}>
-              <Text style={styles.headerTitle}>Supervisor Dashboard</Text>
+              <Text style={styles.headerTitle}>Hi, {currentUser?.username}</Text>
               <Text style={styles.headerSubtitle}>
-                {currentUser && currentUser.name ? currentUser.name : 'Welcome'}
+                Welcome
               </Text>
             </View>
             <View style={styles.headerButtons}>
