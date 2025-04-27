@@ -1,35 +1,33 @@
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
   RefreshControl,
   SafeAreaView,
-  TextInput
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { LOCATION_URL, AUTH_URL } from "../api-url";
+import {AUTH_URL} from "../api-url";
 import {useCurrentUser} from "../hooks/useCurrentUser";
 
-export default function SurveyScreen({ navigation }) {
+export default function SurveyorListScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [surveyors, setSurveyors] = useState([]);
-  const [locations, setLocations] = useState([]); // Store all locations as an array
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const {currentUser} = useCurrentUser();
   console.log("Current User:", currentUser);
-  
+
   // Load data when currentUser is available
   useEffect(() => {
     if (currentUser?._id) {
       fetchData();
     }
   }, [currentUser]);
-  
+
   // Fetch surveyors data
   const fetchSurveyors = async () => {
     try {
@@ -40,12 +38,12 @@ export default function SurveyScreen({ navigation }) {
       }
 
       setLoading(true);
-      
+
       // Correctly use the currentUser's reportingTo field
       console.log("Loading surveyors----------44", currentUser);
       const apiUrl = `${AUTH_URL}/api/auth/users?reportingTo=${currentUser?._id}`;
       console.log("api-url ", apiUrl);
-      
+
       const response = await fetch(apiUrl);
 
       if (!response || !response.ok) {
@@ -67,51 +65,16 @@ export default function SurveyScreen({ navigation }) {
     }
   };
 
-  // Fetch locations
-  const fetchLocations = async () => {
-    try {
-      if (!LOCATION_URL || !currentUser?._id) {
-        console.log("Cannot fetch locations: Missing LOCATION_URL or user ID");
-        setLocations([]);
-        return;
-      }
-
-      console.log("Starting to fetch locations");
-      
-      // Include the createdBy and status parameters as shown in the logs
-      const apiUrl = `${LOCATION_URL}/api/locations?createdBy=${currentUser._id}&status=COMPLETED,APPROVED,REJECTED`;
-      console.log("Fetching locations from URL:", apiUrl);
-      
-      const response = await fetch(apiUrl);
-
-      if (!response || !response.ok) {
-        console.log("Failed to fetch locations:", response?.status);
-        setLocations([]);
-        return;
-      }
-
-      const data = await response.json();
-      // Store the array of locations directly
-      const locationsArray = data && data.data ? data.data : [];
-      console.log("Locations fetched:", locationsArray.length);
-      setLocations(Array.isArray(locationsArray) ? locationsArray : []);
-      console.log("Finished location fetch, setting loading to false");
-    } catch (err) {
-      console.error("Error fetching locations:", err);
-      setLocations([]);
-    }
-  };
-
   // Fetch all data
   const fetchData = async () => {
     setError(null);
-    
+
     if (!currentUser?._id) {
       console.log("Cannot fetch data: currentUser not loaded yet");
       return;
     }
-    
-    await Promise.all([fetchSurveyors(), fetchLocations()]);
+
+    await Promise.all([fetchSurveyors()]);
   };
 
   // Handle refresh
@@ -130,118 +93,32 @@ export default function SurveyScreen({ navigation }) {
 
     return surveyors.filter(surveyor => {
       // Check if surveyor name or email matches
-      const nameMatch = surveyor?.username?.toLowerCase().includes(query) ||
+      return surveyor?.username?.toLowerCase().includes(query) ||
         surveyor?.email?.toLowerCase().includes(query);
 
-      if (nameMatch) return true;
 
-      // Check if any of the assigned locations match
-      if (surveyor?._id) {
-        const surveyorLocations = locations.filter(
-          location => location?.assignedTo === surveyor._id
-        );
-        
-        return surveyorLocations.some(location =>
-          location?.title?.toLowerCase().includes(query)
-        );
-      }
-
-      return false;
     });
-  }, [surveyors, locations, searchQuery]);
+  }, [surveyors, searchQuery]);
 
-  // Handle assign location
-  const handleAssignLocation = (surveyorId) => {
-    try {
-      if (!surveyorId) return;
-      if (!navigation) return;
-      
-      navigation.navigate('AssignLocation', {
-        surveyorId,
-        onLocationAssigned: () => {
-          fetchLocations(); // Refresh locations after assignment
-        }
-      });
-    } catch (error) {
-      console.log('Error navigating to AssignLocation', error);
-    }
-  };
-
-  // Get locations for a specific surveyor
-  const getLocationsForSurveyor = (surveyorId) => {
-    if (!surveyorId || !Array.isArray(locations)) return [];
-    
-    return locations.filter(
-      location => location && location.assignedTo === surveyorId
-    );
-  };
 
   // Render surveyor card
   const renderSurveyorCard = (item) => {
     try {
       if (!item) return null;
 
-      // Get array of locations for this surveyor
-      const surveyorLocations = getLocationsForSurveyor(item._id);
-
       return (
-        <View key={item._id || Math.random().toString()} style={styles.card}>
+        <TouchableOpacity
+          key={item._id || Math.random().toString()}
+          style={styles.card}
+          onPress={() => navigation.navigate('SurveyorLocations', { surveyorId: item._id })}
+        >
           <Text style={styles.name}>{item.username || 'Unknown'}</Text>
           <Text style={styles.email}>{item.email || 'No email'}</Text>
           <Text style={styles.status}>Status: {item.status === 1 ? 'Active' : 'Inactive'}</Text>
           <Text style={styles.lastLogin}>
             Last Login: {item.lastLogin ? new Date(item.lastLogin).toLocaleString() : 'Unknown'}
           </Text>
-
-          {Array.isArray(surveyorLocations) && surveyorLocations.length > 0 ? (
-            <>
-              <View style={styles.locationsContainer}>
-                <Text style={styles.locationHeader}>
-                  Assigned Locations ({surveyorLocations.length}):
-                </Text>
-                {surveyorLocations.map((location) => (
-                  location && location._id ? (
-                    <View key={location._id} style={styles.locationInfo}>
-                      <Text style={styles.locationTitle}>📍 {location.title || 'Unnamed Location'}</Text>
-                      <Text style={styles.locationDetails}>
-                        Center: ({
-                        location.centerPoint &&
-                        location.centerPoint.coordinates &&
-                        location.centerPoint.coordinates[1] ?
-                          location.centerPoint.coordinates[1].toFixed(6) : 'N/A'
-                      },
-                        {
-                          location.centerPoint &&
-                          location.centerPoint.coordinates &&
-                          location.centerPoint.coordinates[0] ?
-                            location.centerPoint.coordinates[0].toFixed(6) : 'N/A'
-                        })
-                      </Text>
-                      <Text style={styles.locationDetails}>Status: {location.status || 'N/A'}</Text>
-                      <Text style={styles.locationDetails}>Radius: {location.radius || 0}m</Text>
-                    </View>
-                  ) : null
-                ))}
-              </View>
-
-              {item._id && (
-                <TouchableOpacity
-                  style={[styles.assignBtn, { marginTop: 8 }]}
-                  onPress={() => handleAssignLocation(item._id)}
-                >
-                  <Text style={styles.btnText}>Assign Another Location</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          ) : item._id ? (
-            <TouchableOpacity
-              style={styles.assignBtn}
-              onPress={() => handleAssignLocation(item._id)}
-            >
-              <Text style={styles.btnText}>Assign Location</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
+        </TouchableOpacity>
       );
     } catch (error) {
       return (
@@ -269,8 +146,6 @@ export default function SurveyScreen({ navigation }) {
           />
         }
       >
-        <Text style={styles.title}>Surveyors & Assigned Locations</Text>
-        
         <View style={styles.searchContainer}>
           <TextInput
             style={styles.searchInput}
@@ -294,10 +169,12 @@ export default function SurveyScreen({ navigation }) {
         </View>
 
         <View style={styles.surveyorsContainer}>
-          <Text style={styles.sectionTitle}>
-            Surveyors {searchQuery ? `(${filteredSurveyors.length} results)` : ''}
-          </Text>
-          
+          {searchQuery ? (
+            <Text style={styles.sectionTitle}>
+              Surveyors ({filteredSurveyors.length} results)
+            </Text>
+          ) : null}
+
           {loading ? (
             <View style={styles.centerContent}>
               <Text style={styles.loadingText}>Loading surveyors...</Text>
@@ -312,11 +189,12 @@ export default function SurveyScreen({ navigation }) {
           ) : filteredSurveyors.length > 0 ? (
             filteredSurveyors.map(surveyor => renderSurveyorCard(surveyor))
           ) : (
+            searchQuery ?
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>
-                {searchQuery ? 'No surveyors found matching your search.' : 'No surveyors found.'}
+                No surveyors found matching your search.
               </Text>
-            </View>
+            </View> : null
           )}
         </View>
       </ScrollView>

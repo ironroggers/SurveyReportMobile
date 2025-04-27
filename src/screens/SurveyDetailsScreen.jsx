@@ -51,7 +51,7 @@ export default function SurveyDetailsScreen({ route, navigation }) {
   };
 
   const handleSaveChanges = () => {
-    // Here you can send updated survey details back to SurveyListScreen via route or context
+    // Here you can send updated survey details back to LocationDetailsScreen via route or context
     Alert.alert('Saved', 'Survey updated successfully!');
     navigation.goBack();
   };

@@ -18,41 +18,72 @@ export default function SurveyFormScreen() {
   const [title, setTitle] = useState('');
   const [terrainType, setTerrainType] = useState('URBAN');
   const [elevation, setElevation] = useState('');
-  const [existingInfrastructure, setExistingInfrastructure] = useState(['POLES']);
   const navigation = useNavigation();
   const route = useRoute();
-  const assignedLocation = route.params?.existingSurvey?.location || route.params?.location._id;
-  const currentLocation = route.params?.currentLocation;
+  const assignedLocation = route.params?.locationData;
+  const currentLocation = route.params?.location;
+  const existingSurvey = route.params?.existingSurvey;
+  const isViewOnly = route.params?.isViewOnly || false; // Default to false (edit mode)
   const { currentUser } = useCurrentUser();
   const [isUploading, setIsUploading] = useState(false);
+  console.log("currentLocation", currentLocation, assignedLocation);
+  console.log("existingSurvey", existingSurvey);
+  console.log("isViewOnly mode:", isViewOnly);
 
-  const TERRAIN_TYPES = ['URBAN', 'RURAL', 'SUBURBAN', 'FOREST', 'MOUNTAIN'];
-  const INFRASTRUCTURE_TYPES = ['POLES', 'DUCTS', 'TOWERS', 'FIBER', 'NONE'];
+  const TERRAIN_TYPES = ['URBAN', 'RURAL', 'FOREST', 'MOUNTAIN', 'WETLAND', 'COASTAL'];
 
   const mapRef = React.useRef(null);
 
+  // Populate form with existing survey data when it's provided
   useEffect(() => {
-    if (route.params?.existingSurvey) {
-      const { existingSurvey } = route.params;
-      const latitude = existingSurvey?.terrainData?.centerPoint?.coordinates?.[1];
-      const longitude = existingSurvey?.terrainData?.centerPoint?.coordinates?.[0];
-      setMediaFiles(existingSurvey.mediaFiles || []);
-      setDetails(existingSurvey.description || '');
-      setTitle(existingSurvey.title || '');
-      setTerrainType(existingSurvey.terrainData?.terrainType || 'URBAN');
-      setElevation(existingSurvey.terrainData?.elevation?.toString() || '');
-      setExistingInfrastructure(existingSurvey.terrainData?.existingInfrastructure || ['POLES']);
+    if (existingSurvey) {
+      console.log('Prefilling form with existing survey data:', existingSurvey);
       
-      if (latitude && longitude) {
-        setLocation({ latitude, longitude });
+      // Set title and details
+      setTitle(existingSurvey.title || '');
+      setDetails(existingSurvey.description || '');
+      
+      // Set terrain type and elevation if available
+      if (existingSurvey.terrainData) {
+        setTerrainType(existingSurvey.terrainData.type || 'URBAN');
+        setElevation(existingSurvey.terrainData.elevation?.toString() || '');
+      }
+      
+      // Set location based on survey coordinates
+      if (existingSurvey.latlong && existingSurvey.latlong.length >= 2) {
+        const surveyLocation = {
+          latitude: existingSurvey.latlong[0],
+          longitude: existingSurvey.latlong[1]
+        };
+        
+        setLocation(surveyLocation);
+        
+        // Set map region around the survey location
         setMapRegion({
-          latitude: latitude,
-          longitude: longitude,
+          latitude: surveyLocation.latitude,
+          longitude: surveyLocation.longitude,
           latitudeDelta: 0.01,
           longitudeDelta: 0.01,
         });
       }
-    } else if (currentLocation?.latitude && currentLocation?.longitude) {
+      
+      // Load media files from the existing survey
+      if (existingSurvey.mediaFiles && existingSurvey.mediaFiles.length > 0) {
+        const formattedMediaFiles = existingSurvey.mediaFiles.map(file => ({
+          url: file.url,
+          fileType: file.fileType || getFileType(getMimeType(file.url)),
+          description: file.description || '',
+          uploaded_at: file.uploaded_at || new Date()
+        }));
+        
+        setMediaFiles(formattedMediaFiles);
+      }
+    }
+  }, [existingSurvey]);
+
+  // Set current location from route params
+  useEffect(() => {
+    if (currentLocation?.latitude && currentLocation?.longitude && !existingSurvey) {
       setLocation(currentLocation);
       
       setMapRegion({
@@ -62,7 +93,7 @@ export default function SurveyFormScreen() {
         longitudeDelta: 0.01,
       });
     }
-  }, [route.params]);
+  }, [currentLocation, existingSurvey]);
 
   const handleUploadAttachments = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -82,7 +113,7 @@ export default function SurveyFormScreen() {
         url: asset.uri,
         fileType: getFileType(asset.type || getMimeType(asset.uri)),
         description: '',
-        uploadedAt: new Date()
+        uploaded_at: new Date()
       }));
       setMediaFiles([...mediaFiles, ...newMediaFiles]);
     }
@@ -132,6 +163,7 @@ export default function SurveyFormScreen() {
       
       if (!fileInfo.exists) {
         console.log('File does not exist');
+        throw new Error('File does not exist');
       }
 
       // Get the file name from the URI
@@ -139,7 +171,9 @@ export default function SurveyFormScreen() {
       
       // Determine mime type based on file extension
       const mimeType = getMimeType(fileName);
-      console.log('Uploading file:', { fileName, mimeType });
+      // Determine file type based on mime type
+      const fileType = getFileType(mimeType);
+      console.log('Uploading file:', { fileName, fileType, mimeType });
       
       // Create form data
       const formData = new FormData();
@@ -175,51 +209,55 @@ export default function SurveyFormScreen() {
         if (!response.ok) {
           const errorData = await response.json().catch(e => ({ message: 'Failed to parse error response' }));
           console.log('Upload failed:', errorData);
-          console.log(errorData.message || `Upload failed with status ${response.status}`);
+          throw new Error(errorData.message || `Upload failed with status ${response.status}`);
         }
 
-        const data = await response.json().catch(e => {
+        let data;
+        try {
+          data = await response.json();
+          console.log('Upload response:', data);
+        } catch (e) {
           console.log('Failed to parse response:', e);
-          console.log('Failed to parse server response');
-        });
+          throw new Error('Failed to parse server response');
+        }
         
-        console.log('Upload successful:', data);
+        // Check if the response has the expected structure
+        if (!data || !data.data || !data.data.url) {
+          console.log('Invalid response format:', data);
+          throw new Error('Server returned an invalid response format');
+        }
 
         return {
           url: data.data.url,
-          fileType: data.data.fileType || getFileType(mimeType),
+          fileType: data.data.fileType || fileType || 'DOCUMENT',
           description: '',
-          uploadedAt: new Date()
+          uploaded_at: new Date()
         };
       } catch (error) {
         if (error.name === 'AbortError') {
-          console.log('Upload timed out. Please check your internet connection and try again.');
+          throw new Error('Upload timed out. Please check your internet connection and try again.');
         }
-         error;
+        throw error;
       } finally {
         clearTimeout(timeoutId);
       }
     } catch (error) {
       console.log('Error in uploadFile:', error);
-       error;
+      throw error;
     }
   };
 
   const handleSubmit = async () => {
-    if (!location || mediaFiles.length === 0 || !details || !title || !elevation) {
+    console.log('Submit pressed, existingSurvey:', route.params?.existingSurvey ? 
+      `ID: ${route.params.existingSurvey._id}` : 'None (creating new survey)');
+    
+    // Special check for updates - only require images for new surveys
+    const isUpdate = route.params?.existingSurvey && route.params.existingSurvey._id;
+    const hasExistingImages = isUpdate && existingSurvey.mediaFiles && existingSurvey.mediaFiles.length > 0;
+    
+    if (!location || (!hasExistingImages && mediaFiles.length === 0) || !details || !title || !elevation) {
       Alert.alert('Incomplete', 'Please fill all required fields (title, location, attachments, elevation, and details).');
       return;
-    }
-
-    // Check if the location is within the geofence
-    if (assignedLocation?.geofence?.coordinates[0]) {
-      const point = [location.longitude, location.latitude];
-      const polygon = assignedLocation.geofence.coordinates[0];
-      
-      if (!isPointInPolygon(point, polygon)) {
-        Alert.alert('Invalid Location', 'The survey point must be within the assigned area (red polygon).');
-        return;
-      }
     }
 
     try {
@@ -227,73 +265,234 @@ export default function SurveyFormScreen() {
 
       // First, upload all media files
       const uploadedMediaFiles = [];
-      for (const file of mediaFiles) {
-        if (!file.url.startsWith('http')) { // Only upload files that haven't been uploaded yet
+      let uploadErrors = 0;
+      
+      // First add all existing remote media files (already uploaded)
+      const existingRemoteFiles = mediaFiles.filter(file => file.url.startsWith('http'));
+      console.log(`Found ${existingRemoteFiles.length} already uploaded files`);
+      existingRemoteFiles.forEach(file => {
+        uploadedMediaFiles.push({
+          ...file,
+          fileType: file.fileType || getFileType(getMimeType(file.url)) || 'DOCUMENT',
+        });
+      });
+
+      // Then try to upload new local files
+      const newLocalFiles = mediaFiles.filter(file => !file.url.startsWith('http'));
+      console.log(`Attempting to upload ${newLocalFiles.length} new files`);
+      
+      if (newLocalFiles.length > 0) {
+        for (const file of newLocalFiles) {
           try {
             const uploadResult = await uploadFile(file.url);
-            uploadedMediaFiles.push({
-              ...uploadResult,
-              description: file.description || '',
-            });
+            if (uploadResult) {
+              uploadedMediaFiles.push({
+                ...uploadResult,
+                description: file.description || '',
+                fileType: uploadResult.fileType || file.fileType || 'DOCUMENT',
+              });
+            } else {
+              uploadErrors++;
+              console.log('Upload returned null result for file:', file.url);
+            }
           } catch (error) {
+            uploadErrors++;
             console.log('Error uploading file:', file.url, error);
-            Alert.alert(
-              'Upload Error',
-              `Failed to upload file. ${error.message}`
-            );
-            setIsUploading(false);
-            return;
+            
+            // For network errors, offer retry or continue
+            if (error.message && error.message.includes('Network request failed')) {
+              const decision = await new Promise(resolve => {
+                Alert.alert(
+                  'Network Error',
+                  'Failed to upload image due to network issues. Would you like to retry, continue without this image, or cancel?',
+                  [
+                    {
+                      text: 'Cancel',
+                      style: 'cancel',
+                      onPress: () => resolve('cancel')
+                    },
+                    {
+                      text: 'Continue Without Image',
+                      onPress: () => resolve('continue')
+                    },
+                    {
+                      text: 'Retry',
+                      onPress: () => resolve('retry')
+                    }
+                  ]
+                );
+              });
+              
+              if (decision === 'cancel') {
+                setIsUploading(false);
+                return;
+              } else if (decision === 'retry') {
+                try {
+                  console.log('Retrying upload...');
+                  const retryResult = await uploadFile(file.url);
+                  if (retryResult) {
+                    uploadedMediaFiles.push({
+                      ...retryResult,
+                      description: file.description || '',
+                      fileType: retryResult.fileType || file.fileType || 'DOCUMENT',
+                    });
+                    uploadErrors--; // Decrease error count on success
+                  }
+                } catch (retryError) {
+                  console.log('Retry failed:', retryError);
+                  // Continue without this file
+                }
+              }
+              // If 'continue' is selected, we just move on
+            } else {
+              // For other errors, just ask if user wants to continue
+              const shouldContinue = await new Promise(resolve => {
+                Alert.alert(
+                  'Upload Error',
+                  `Failed to upload file: ${error.message}. Would you like to continue without this file?`,
+                  [
+                    {
+                      text: 'Cancel',
+                      style: 'cancel',
+                      onPress: () => resolve(false)
+                    },
+                    {
+                      text: 'Continue',
+                      onPress: () => resolve(true)
+                    }
+                  ]
+                );
+              });
+              
+              if (!shouldContinue) {
+                setIsUploading(false);
+                return;
+              }
+            }
           }
-        } else {
-          uploadedMediaFiles.push(file); // Keep already uploaded files as is
+        }
+      }
+      
+      // Warn user if we're proceeding with no images (only for new surveys)
+      if (uploadedMediaFiles.length === 0 && !isUpdate) {
+        Alert.alert(
+          'No Images',
+          'You are creating a survey without any images. Do you want to continue?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: () => {
+                setIsUploading(false);
+                return;
+              }
+            },
+            {
+              text: 'Continue',
+              onPress: () => console.log('Continuing without images')
+            }
+          ]
+        );
+      }
+      
+      // Warn if some uploads failed
+      if (uploadErrors > 0) {
+        console.log(`${uploadErrors} out of ${newLocalFiles.length} uploads failed`);
+        if (uploadedMediaFiles.length === 0 && !hasExistingImages) {
+          Alert.alert('Warning', 'All uploads failed. Please check your internet connection and try again.');
+          setIsUploading(false);
+          return;
         }
       }
 
+      // Create survey data according to new schema
       const surveyData = {
-        title: title,
+        title,
         description: details,
-        location: assignedLocation,
+        location: assignedLocation._id,
+        // Store coordinates in [latitude, longitude] format as required by the new schema
+        // If we're updating and the current location comes from an existing survey, use that
+        latlong: existingSurvey && !currentLocation ? 
+          existingSurvey.latlong : 
+          [location?.latitude || 0, location?.longitude || 0],
+        created_by: existingSurvey?.created_by?._id || currentUser?._id,
+        updated_by: currentUser?._id,
         terrainData: {
-          terrainType: terrainType,
-          elevation: parseInt(elevation),
-          centerPoint: {
-            type: "Point",
-            coordinates: [location.longitude, location.latitude]
-          },
-          existingInfrastructure: existingInfrastructure
+          type: terrainType,
+          elevation: parseInt(elevation)
         },
-        assignedTo: currentUser.id,
-        assignedBy: currentUser.reportingTo,
-        mediaFiles: uploadedMediaFiles
+        mediaFiles: uploadedMediaFiles,
+        status: existingSurvey?.status || 1
       };
 
       console.log('Sending survey data:', surveyData);
-
-      const isUpdate = route.params?.existingSurvey;
+      
+      // Validate that we have a valid ID for updates
+      if (isUpdate) {
+        console.log(`Updating existing survey with ID: ${route.params.existingSurvey._id}`);
+      } else {
+        console.log('Creating new survey');
+      }
+      
       const url = isUpdate 
         ? `${SURVEY_URL}/api/surveys/${route.params.existingSurvey._id}`
         : `${SURVEY_URL}/api/surveys`;
+      
+      const method = isUpdate ? 'PUT' : 'POST';
+      console.log(`Making ${method} request to ${url}`);
+      console.log('Request payload:', JSON.stringify(surveyData, null, 2));
 
-      const response = await fetch(url, {
-        method: isUpdate ? 'PUT' : 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(surveyData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(e => ({ message: 'Failed to parse error response' }));
-        console.log(errorData.message || `Failed to submit survey (${response.status})`);
+      try {
+        const response = await fetch(url, {
+          method: method,
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(surveyData)
+        });
+  
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(e => ({ message: 'Failed to parse error response' }));
+          console.log('Error response:', errorData);
+          Alert.alert('Error', `Failed to submit survey: ${errorData.message || response.status}`);
+          setIsUploading(false);
+          return;
+        }
+  
+        const result = await response.json();
+        console.log('Survey successfully submitted/updated:', result.data);
+        
+        // Ensure we're passing the new survey data back to the LocationDetails screen
+        if (result.data) {
+          // Get the previous screen from the navigation state
+          const navState = navigation.getState();
+          const prevRoute = navState.routes[navState.index - 1];
+          
+          // If previous screen is LocationDetails, set the newSurvey param
+          if (prevRoute && prevRoute.name === 'LocationDetails') {
+            // Set the survey data as a param for the previous screen
+            navigation.setParams({ newSurvey: result.data });
+            
+            // Navigate back with the updated survey data
+            navigation.goBack()
+          } else {
+            // Just go back if not from LocationDetails
+            navigation.goBack();
+          }
+        } else {
+          navigation.goBack();
+        }
+      } catch (networkError) {
+        console.log('Network error during survey submission:', networkError);
+        Alert.alert(
+          'Network Error',
+          'Failed to submit survey due to network issues. Please check your connection and try again.',
+          [{ text: 'OK' }]
+        );
       }
-
-      const result = await response.json();
-      
-      // Go back to previous screen with the new/updated survey data
-      navigation.goBack();
-      navigation.setParams({ newSurvey: result.data });
-      
     } catch (error) {
       console.log('Error in handleSubmit:', error);
       Alert.alert(
@@ -326,14 +525,6 @@ export default function SurveyFormScreen() {
     return inside;
   };
 
-  const toggleInfrastructure = (type) => {
-    if (existingInfrastructure.includes(type)) {
-      setExistingInfrastructure(existingInfrastructure.filter(t => t !== type));
-    } else {
-      setExistingInfrastructure([...existingInfrastructure, type]);
-    }
-  };
-
   const fitMapToPoints = () => {
     if (mapRef.current) {
       const points = [];
@@ -361,6 +552,13 @@ export default function SurveyFormScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {/* View-only mode banner */}
+      {isViewOnly && (
+        <View style={styles.viewOnlyBanner}>
+          <Text style={styles.viewOnlyText}>View Only Mode - Editing not allowed</Text>
+        </View>
+      )}
+      
       <View style={styles.mapContainer}>
         <SafeMapView
           style={styles.map}
@@ -403,10 +601,11 @@ export default function SurveyFormScreen() {
 
       <Text style={styles.label}>Title</Text>
       <TextInput
-        style={styles.titleInput}
+        style={[styles.titleInput, isViewOnly && styles.disabledInput]}
         placeholder="Enter survey point title"
         value={title}
         onChangeText={setTitle}
+        editable={!isViewOnly}
       />
 
       <Text style={styles.label}>Survey Location</Text>
@@ -418,11 +617,12 @@ export default function SurveyFormScreen() {
       </Text>
 
       <Text style={styles.label}>Terrain Type</Text>
-      <View style={styles.pickerContainer}>
+      <View style={[styles.pickerContainer, isViewOnly && styles.disabledInput]}>
         <Picker
           selectedValue={terrainType}
           onValueChange={(value) => setTerrainType(value)}
           style={styles.picker}
+          enabled={!isViewOnly}
         >
           {TERRAIN_TYPES.map((type) => (
             <Picker.Item key={type} label={type} value={type} />
@@ -432,46 +632,30 @@ export default function SurveyFormScreen() {
 
       <Text style={styles.label}>Elevation (meters)</Text>
       <TextInput
-        style={styles.titleInput}
+        style={[styles.titleInput, isViewOnly && styles.disabledInput]}
         placeholder="Enter elevation in meters"
         value={elevation}
         onChangeText={setElevation}
         keyboardType="numeric"
+        editable={!isViewOnly}
       />
-
-      <Text style={styles.label}>Existing Infrastructure</Text>
-      <View style={styles.infrastructureContainer}>
-        {INFRASTRUCTURE_TYPES.map((type) => (
-          <TouchableOpacity
-            key={type}
-            style={[
-              styles.infrastructureButton,
-              existingInfrastructure.includes(type) && styles.infrastructureButtonSelected
-            ]}
-            onPress={() => toggleInfrastructure(type)}
-          >
-            <Text style={[
-              styles.infrastructureButtonText,
-              existingInfrastructure.includes(type) && styles.infrastructureButtonTextSelected
-            ]}>
-              {type}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
 
       <Text style={styles.label}>Survey Details</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, isViewOnly && styles.disabledInput]}
         placeholder="Enter terrain, elevation, infra info..."
         multiline
         value={details}
         onChangeText={setDetails}
+        editable={!isViewOnly}
       />
 
-      <TouchableOpacity style={styles.uploadBtn} onPress={handleUploadAttachments}>
-        <Text style={styles.btnText}>📷 Upload Attachments</Text>
-      </TouchableOpacity>
+      {/* Only show upload button if not in view-only mode */}
+      {!isViewOnly && (
+        <TouchableOpacity style={styles.uploadBtn} onPress={handleUploadAttachments}>
+          <Text style={styles.btnText}>📷 Upload Attachments</Text>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.attachmentsContainer}>
         {mediaFiles.map((file, idx) => (
@@ -523,19 +707,25 @@ export default function SurveyFormScreen() {
                 </Text>
               </View>
             )}
-            <TouchableOpacity
-              style={styles.removeButton}
-              onPress={() => setMediaFiles(mediaFiles.filter((_, i) => i !== idx))}
-            >
-              <Text style={styles.removeButtonText}>✕</Text>
-            </TouchableOpacity>
+            {/* Only show remove button if not in view-only mode */}
+            {!isViewOnly && (
+              <TouchableOpacity
+                style={styles.removeButton}
+                onPress={() => setMediaFiles(mediaFiles.filter((_, i) => i !== idx))}
+              >
+                <Text style={styles.removeButtonText}>✕</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ))}
       </View>
 
-      <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
-        <Text style={styles.submitText}>✅ {route.params?.existingSurvey ? 'Update' : 'Submit'} Survey</Text>
-      </TouchableOpacity>
+      {/* Only show submit button if not in view-only mode */}
+      {!isViewOnly && (
+        <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
+          <Text style={styles.submitText}>✅ {route.params?.existingSurvey ? 'Update' : 'Submit'} Survey</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
@@ -588,28 +778,6 @@ const styles = StyleSheet.create({
   },
   picker: {
     height: 50,
-  },
-  infrastructureContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 16,
-    gap: 8,
-  },
-  infrastructureButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#1976D2',
-  },
-  infrastructureButtonSelected: {
-    backgroundColor: '#1976D2',
-  },
-  infrastructureButtonText: {
-    color: '#1976D2',
-  },
-  infrastructureButtonTextSelected: {
-    color: '#fff',
   },
   uploadBtn: {
     backgroundColor: '#1976D2',
@@ -704,5 +872,19 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  viewOnlyBanner: {
+    padding: 10,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 6,
+    marginBottom: 16,
+  },
+  viewOnlyText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  disabledInput: {
+    backgroundColor: '#f0f0f0',
   },
 });

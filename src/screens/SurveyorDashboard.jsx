@@ -1,30 +1,41 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, SafeAreaView, ScrollView, RefreshControl, Platform } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, SafeAreaView, ScrollView, RefreshControl } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { Marker, Polygon } from 'react-native-maps';
-import * as Location from 'expo-location';
 import { useIsFocused } from '@react-navigation/native';
-import {LOCATION_URL} from "../api-url";
+import { LOCATION_URL, ATTENDANCE_URL } from "../api-url";
 import { showFeedbackForm } from '../utils/instabug';
-import SafeMapView from '../components/SafeMapView';
+import { MaterialIcons } from '@expo/vector-icons';
+
+// Helper function to get status name from status code
+const getStatusName = (statusCode) => {
+  switch (statusCode) {
+    case 1: return 'Released';
+    case 2: return 'Assigned';
+    case 3: return 'Active';
+    case 4: return 'Completed';
+    case 5: return 'Accepted';
+    case 6: return 'Reverted';
+    default: return statusCode; // Return the string status if not a number
+  }
+};
 
 export default function SurveyorDashboard({ navigation }) {
   const { logout } = useContext(AuthContext);
   const { currentUser } = useCurrentUser();
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [attendanceMarked, setAttendanceMarked] = useState(true);
-  const [selectedLocation, setSelectedLocation] = useState(null);
-  const [currentLocation, setCurrentLocation] = useState(null);
-  const [initialRegion, setInitialRegion] = useState({
-    latitude: 17.385044,
-    longitude: 78.486671,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
-  });
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('ALL');
+  const [attendanceHistory, setAttendanceHistory] = useState([]);
+  const [locationStats, setLocationStats] = useState({
+    released: 0,
+    assigned: 0, 
+    active: 0,
+    completed: 0,
+    accepted: 0,
+    reverted: 0
+  });
   const isFocused = useIsFocused();
 
   const filterOptions = [
@@ -42,71 +53,37 @@ export default function SurveyorDashboard({ navigation }) {
   });
 
   useEffect(() => {
-    fetchAssignedLocations();
-    getCurrentLocation();
+    fetchInitialData();
   }, [currentUser]);
 
-  const getCurrentLocation = async () => {
+  useEffect(() => {
+    if (isFocused) {
+      onRefresh();
+    }
+  }, [isFocused]);
+
+  const fetchInitialData = async () => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Please grant location permissions to use this feature');
-      }
-
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-
-      const newLocation = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      };
-
-      setCurrentLocation(newLocation);
-      setInitialRegion({
-        ...newLocation,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      });
+      setLoading(true);
+      await Promise.all([
+        fetchAssignedLocations(),
+        fetchAttendanceHistory()
+      ]);
     } catch (error) {
-      console.log('Error getting location:', error);
-      Alert.alert('Error', 'Unable to get your current location');
+      console.log('Error fetching initial data:', error);
+    } finally {
+      setLoading(false);
     }
   };
-
-  const fitMapToPoints = () => {
-    if (mapRef.current) {
-      const points = [];
-      
-      // Add current location if available
-      if (currentLocation) {
-        points.push(currentLocation);
-      }
-      
-      // Add all assigned locations
-      locations.forEach(location => {
-        if (location.centerPoint?.coordinates) {
-          points.push({
-            latitude: location.centerPoint.coordinates[1],
-            longitude: location.centerPoint.coordinates[0],
-          });
-        }
-      });
-      
-      if (points.length > 0) {
-        mapRef.current.fitToCoordinates(points, {
-          edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-          animated: true,
-        });
-      }
-    }
-  };
-
-  const mapRef = React.useRef(null);
 
   const fetchAssignedLocations = async () => {
     try {
-      const response = await fetch(`${LOCATION_URL}/api/locations?assignedTo=${currentUser?.id}`, {
+      if (!currentUser?.id) {
+        console.log('No user ID available to fetch locations');
+        return;
+      }
+
+      const response = await fetch(`${LOCATION_URL}/api/locations?assignedTo=${currentUser.id}`, {
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
@@ -118,7 +95,6 @@ export default function SurveyorDashboard({ navigation }) {
         console.log('API Error:', errorData);
         Alert.alert('Error', 'Failed to fetch assigned locations');
         setLocations([]);
-        setLoading(false);
         return;
       }
       
@@ -128,64 +104,98 @@ export default function SurveyorDashboard({ navigation }) {
         console.log('Invalid location data format:', data);
         Alert.alert('Error', 'Invalid data format received from server');
         setLocations([]);
-        setLoading(false);
         return;
       }
 
-      // Validate location structure
-      const validLocations = data.data.filter(location => {
-        const isValid = location && 
-          location.centerPoint?.coordinates?.length === 2 &&
-          location.geofence?.coordinates?.[0]?.length > 0;
-        
-        if (!isValid) {
-          console.log('Invalid location structure:', location);
+      // Filter locations assigned to the current user
+      const userLocations = data.data.filter(location => 
+        location && location.assignedTo === currentUser.id
+      );
+
+      setLocations(userLocations);
+      
+      // Calculate location stats
+      const stats = {
+        released: 0,
+        assigned: 0,
+        active: 0,
+        completed: 0,
+        accepted: 0,
+        reverted: 0
+      };
+
+      userLocations.forEach(location => {
+        if (location && location.status !== undefined) {
+          // If status is a number (like in SupervisorDashboard)
+          if (typeof location.status === 'number') {
+            switch (location.status) {
+              case 1: stats.released++; break;
+              case 2: stats.assigned++; break;
+              case 3: stats.active++; break;
+              case 4: stats.completed++; break;
+              case 5: stats.accepted++; break;
+              case 6: stats.reverted++; break;
+              default: break;
+            }
+          } else if (typeof location.status === 'string') {
+            // If status is a string (like in original SurveyorDashboard)
+            switch (location.status) {
+              case 'RELEASED': stats.released++; break;
+              case 'ASSIGNED': stats.assigned++; break;
+              case 'ACTIVE': stats.active++; break;
+              case 'COMPLETED': stats.completed++; break;
+              case 'APPROVED': stats.accepted++; break;
+              case 'REJECTED': stats.reverted++; break;
+              default: break;
+            }
+          }
         }
-        return isValid;
       });
 
-      setLocations(validLocations);
-
-      // If we have locations, update the map to show all of them
-      if (validLocations.length > 0) {
-        // Calculate the center point of all locations
-        const bounds = validLocations.reduce((acc, location) => {
-          // Consider all geofence points for bounds calculation
-          location.geofence.coordinates[0].forEach(([lng, lat]) => {
-            acc.minLat = Math.min(acc.minLat, lat);
-            acc.maxLat = Math.max(acc.maxLat, lat);
-            acc.minLng = Math.min(acc.minLng, lng);
-            acc.maxLng = Math.max(acc.maxLng, lng);
-          });
-          return acc;
-        }, {
-          minLat: 90,
-          maxLat: -90,
-          minLng: 180,
-          maxLng: -180,
-        });
-
-        // Set initial region to show all locations with padding
-        const centerLat = (bounds.minLat + bounds.maxLat) / 2;
-        const centerLng = (bounds.minLng + bounds.maxLng) / 2;
-        const latDelta = (bounds.maxLat - bounds.minLat) * 1.5; // 1.5 for padding
-        const lngDelta = (bounds.maxLng - bounds.minLng) * 1.5;
-
-        setInitialRegion({
-          latitude: centerLat,
-          longitude: centerLng,
-          latitudeDelta: Math.max(0.05, latDelta),
-          longitudeDelta: Math.max(0.05, lngDelta),
-        });
-      } else {
-        console.log('No assigned locations found for user:', currentUser?.id);
-      }
+      setLocationStats(stats);
     } catch (err) {
       console.log('Error fetching locations:', err);
       Alert.alert('Error', 'Unable to get locations');
       setLocations([]);
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  const fetchAttendanceHistory = async () => {
+    try {
+      // Get the current date
+      const today = new Date();
+      
+      // Calculate the date 3 days ago
+      const threeDaysAgo = new Date(today);
+      threeDaysAgo.setDate(today.getDate() - 3);
+      
+      // Format dates for the API
+      const endDate = today.toISOString().split('T')[0];
+      const startDate = threeDaysAgo.toISOString().split('T')[0];
+      
+      if (!currentUser?.id) {
+        console.log('No user ID available to fetch attendance');
+        return;
+      }
+
+      const url = `${ATTENDANCE_URL}/api/attendance/history?userId=${currentUser.id}&startDate=${startDate}&endDate=${endDate}`;
+      
+      const response = await fetch(url, {
+        method: 'GET'
+      });
+
+      if (!response.ok) {
+        console.log('Failed to fetch attendance history:', response.status);
+        return;
+      }
+
+      const data = await response.json();
+      
+      if (data && data.data) {
+        setAttendanceHistory(data.data);
+      }
+    } catch (error) {
+      console.log('Error fetching attendance history:', error);
     }
   };
 
@@ -206,14 +216,13 @@ export default function SurveyorDashboard({ navigation }) {
     );
   };
 
-  const handleLocationPress = (location) => {
-    setSelectedLocation(location);
-  };
-
   const handleStartSurvey = async (location) => {
     try {
       // Check if there's any active survey
-      const activeLocation = locations.find(loc => loc.status === 'ACTIVE');
+      const activeLocation = locations.find(loc => 
+        loc.status === 'ACTIVE' || loc.status === 3
+      );
+      
       if (activeLocation) {
         Alert.alert(
           'Active Survey Exists',
@@ -240,7 +249,7 @@ export default function SurveyorDashboard({ navigation }) {
         },
         body: JSON.stringify({
           ...location,
-          status: 'ACTIVE'
+          status: typeof location.status === 'number' ? 3 : 'ACTIVE'
         })
       });
 
@@ -261,10 +270,7 @@ export default function SurveyorDashboard({ navigation }) {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([
-        fetchAssignedLocations(),
-        getCurrentLocation()
-      ]);
+      await fetchInitialData();
     } catch (error) {
       console.log('Error refreshing data:', error);
     } finally {
@@ -272,37 +278,99 @@ export default function SurveyorDashboard({ navigation }) {
     }
   }, [currentUser?.id]);
 
-  // Add useEffect for screen focus
-  useEffect(() => {
-    if (isFocused) {
-      onRefresh();
+  // Prepare data for the chart
+  const chartData = [
+    { name: 'Released', value: locationStats.released, color: '#64B5F6' },
+    { name: 'Assigned', value: locationStats.assigned, color: '#FFA726' },
+    { name: 'Active', value: locationStats.active, color: '#66BB6A' },
+    { name: 'Completed', value: locationStats.completed, color: '#7986CB' },
+    { name: 'Accepted', value: locationStats.accepted, color: '#4DB6AC' },
+    { name: 'Reverted', value: locationStats.reverted, color: '#EF5350' }
+  ].filter(item => item.value > 0); // Only include non-zero values
+
+  // Calculate total work hours for the last 3 days
+  const calculateDailyHours = () => {
+    const dailyHours = [];
+    
+    // Get unique dates from attendance history (most recent 3)
+    const uniqueDates = [...new Set(
+      attendanceHistory.map(record => record.date.split('T')[0])
+    )].sort().reverse().slice(0, 3);
+    
+    // For each unique date, calculate total work hours
+    uniqueDates.forEach(date => {
+      const recordsForDay = attendanceHistory.filter(
+        record => record.date.split('T')[0] === date
+      );
+      
+      let totalHours = 0;
+      
+      recordsForDay.forEach(record => {
+        // If the record has workHours field, use it
+        if (typeof record.workHours === 'number') {
+          totalHours += record.workHours;
+        }
+        // Otherwise, calculate from sessions if available
+        else if (record.sessions && record.sessions.length > 0) {
+          record.sessions.forEach(session => {
+            if (session.checkInTime && session.checkOutTime) {
+              const inTime = new Date(session.checkInTime).getTime();
+              const outTime = new Date(session.checkOutTime).getTime();
+              const duration = (outTime - inTime) / (1000 * 60 * 60); // hours
+              totalHours += duration;
+            }
+          });
+        }
+      });
+      
+      const dateObj = new Date(date);
+      const formattedDate = dateObj.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric'
+      });
+      
+      dailyHours.push({
+        date: formattedDate,
+        hours: totalHours.toFixed(2)
+      });
+    });
+    
+    // If we have less than 3 days, fill with empty data
+    while (dailyHours.length < 3) {
+      dailyHours.push({
+        date: 'No data',
+        hours: '0.00'
+      });
     }
-  }, [isFocused]);
+    
+    return dailyHours;
+  };
+  
+  const dailyWorkHours = calculateDailyHours();
 
   const renderItem = ({ item }) => {
-    const isSelected = selectedLocation?._id === item._id;
-
+    const status = typeof item.status === 'number' ? 
+      getStatusName(item.status) : item.status;
+      
     return (
-      <TouchableOpacity 
-        style={[styles.card, isSelected && styles.selectedCard]}
-        onPress={() => handleLocationPress(item)}
-      >
+      <View style={styles.card}>
         <Text style={styles.name}>📍 {item.title}</Text>
         <Text style={styles.locationDetails}>
-          Center: ({item.centerPoint.coordinates[1].toFixed(6)}, 
-          {item.centerPoint.coordinates[0].toFixed(6)})
+          Center: ({item.centerPoint?.coordinates?.[1]?.toFixed(6) || 'N/A'}, 
+          {item.centerPoint?.coordinates?.[0]?.toFixed(6) || 'N/A'})
         </Text>
-        <Text style={styles.locationDetails}>Radius: {item?.radius}m</Text>
-        <Text style={styles.statusDetails}>Status: {item?.status}</Text>
+        <Text style={styles.locationDetails}>Radius: {item?.radius || 0}m</Text>
+        <Text style={styles.statusDetails}>Status: {status}</Text>
 
-        {item.status === 'ACTIVE' ? (
+        {(item.status === 'ACTIVE' || item.status === 3) ? (
           <TouchableOpacity
             style={[styles.surveyBtn, { backgroundColor: '#2E7D32' }]}
             onPress={() => navigation.navigate('SurveyList', { location: item })}
           >
             <Text style={styles.btnText}>Edit Survey</Text>
           </TouchableOpacity>
-        ) : (item.status === 'COMPLETED' || item.status === 'APPROVED') ? (
+        ) : (item.status === 'COMPLETED' || item.status === 'APPROVED' || 
+            item.status === 4 || item.status === 5) ? (
           <TouchableOpacity
             style={[styles.surveyBtn, { backgroundColor: '#FF9800' }]}
             onPress={() => navigation.navigate('ReviewDetails', { 
@@ -322,7 +390,7 @@ export default function SurveyorDashboard({ navigation }) {
             <Text style={styles.btnText}>Start Survey</Text>
           </TouchableOpacity>
         )}
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -374,78 +442,87 @@ export default function SurveyorDashboard({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.mapContainer}>
-          <SafeMapView
-            ref={mapRef}
-            style={styles.map}
-            region={initialRegion}
-            onRegionChangeComplete={region => setInitialRegion(region)}
-            showsUserLocation={true}
-            fallbackText="Map temporarily unavailable"
-            fallbackSubText={`${filteredLocations.length} assigned locations`}
-          >
-            {/* Current Location Marker */}
-            {currentLocation && (
-              <Marker
-                coordinate={currentLocation}
-                title="Your Location"
-                description="Your current position"
-                pinColor="#4CAF50"
-              />
-            )}
-
-            {/* Location Markers and Polygons */}
-            {filteredLocations.map((location) => {
-              // Check if location has valid coordinates
-              if (!location?.centerPoint?.coordinates || 
-                 !location?.geofence?.coordinates?.[0] ||
-                 location.geofence.coordinates[0].length < 3) {
-                console.log('Invalid location data for polygon:', location._id);
-                return null;
-              }
-
-              // Create polygon coordinates array
-              const polygonCoords = location.geofence.coordinates[0].map(([lng, lat]) => ({
-                latitude: lat,
-                longitude: lng,
-              }));
-
-              // Create center point coordinates
-              const centerCoord = {
-                latitude: location.centerPoint.coordinates[1],
-                longitude: location.centerPoint.coordinates[0],
-              };
-
-              return (
-                <React.Fragment key={location._id}>
-                  <Marker
-                    coordinate={centerCoord}
-                    title={location.title}
-                    description={`Status: ${location.status}`}
-                    pinColor={location._id === selectedLocation?._id ? '#FF9800' : '#1976D2'}
-                    onPress={() => handleLocationPress(location)}
-                  />
-                  <Polygon
-                    coordinates={polygonCoords}
-                    strokeColor={location._id === selectedLocation?._id ? '#FF9800' : '#1976D2'}
-                    fillColor={location._id === selectedLocation?._id ? 'rgba(255, 152, 0, 0.2)' : 'rgba(25, 118, 210, 0.2)'}
-                    strokeWidth={2}
-                    tappable
-                    onPress={() => handleLocationPress(location)}
-                  />
-                </React.Fragment>
-              );
-            })}
-          </SafeMapView>
-
-          <TouchableOpacity
-            style={styles.fitBtn}
-            onPress={fitMapToPoints}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.fitBtnText}>Fit Map</Text>
-          </TouchableOpacity>
+        {/* Work Hours Card */}
+        <View style={styles.hoursContainer}>
+          <View style={styles.sectionHeaderContainer}>
+            <MaterialIcons name="access-time" size={24} color="#1976D2" />
+            <Text style={styles.sectionTitle}>Recent Work Hours</Text>
+          </View>
+          <View style={styles.hoursCardContainer}>
+            {dailyWorkHours.map((day, index) => (
+              <View key={index} style={styles.dayHoursCard}>
+                <Text style={styles.dayHoursDate}>{day.date}</Text>
+                <Text style={styles.dayHoursValue}>{day.hours}</Text>
+                <Text style={styles.dayHoursLabel}>hours</Text>
+              </View>
+            ))}
+          </View>
         </View>
+
+        {/* Location Status Overview */}
+        {chartData.length > 0 && (
+          <View style={styles.statsContainer}>
+            <View style={styles.sectionHeaderContainer}>
+              <MaterialIcons name="pie-chart" size={24} color="#1976D2" />
+              <Text style={styles.sectionTitle}>Location Status Overview</Text>
+            </View>
+
+            {/* Status bars instead of chart */}
+            <View style={styles.statusBarsContainer}>
+              {chartData.map((item, index) => {
+                const total = chartData.reduce((acc, curr) => acc + curr.value, 0);
+                const percentage = Math.round((item.value / total) * 100);
+                return (
+                  <View key={index} style={styles.statusBarContainer}>
+                    <View style={[styles.statusBar, {backgroundColor: item.color}]}>
+                      <Text style={styles.statusBarLabel}>{item.name}</Text>
+                      <View style={styles.statusCountBadge}>
+                        <Text style={styles.statusCountText}>{item.value}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.percentageOuterContainer}>
+                      <View style={styles.percentageContainer}>
+                        <View 
+                          style={[styles.percentageBar, {
+                            width: `${percentage}%`,
+                            backgroundColor: item.color
+                          }]} 
+                        />
+                      </View>
+                      <Text style={styles.percentageText}>{percentage}%</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Detailed Status Information */}
+            <View style={styles.detailedStatsContainer}>
+              <View style={styles.statusLegendHeader}>
+                <Text style={styles.detailedStatsTitle}>Location Status Details</Text>
+                <Text style={styles.statusSubtitle}>Total: {
+                  locationStats.released + 
+                  locationStats.assigned + 
+                  locationStats.active + 
+                  locationStats.completed + 
+                  locationStats.accepted + 
+                  locationStats.reverted
+                } locations</Text>
+              </View>
+              
+              {chartData.map((item, index) => (
+                <View key={index} style={styles.detailedStatItem}>
+                  <View style={[styles.statColorIndicator, { backgroundColor: item.color }]} />
+                  <View style={styles.statItemContent}>
+                    <Text style={styles.statItemLabel}>{item.name}</Text>
+                    <Text style={styles.statItemValue}>{item.value}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
         <View style={styles.filterContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {filterOptions.map((option) => (
@@ -494,7 +571,7 @@ export default function SurveyorDashboard({ navigation }) {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: '#fff', 
+    backgroundColor: '#f5f7fa', 
     paddingTop: 20, 
     paddingHorizontal: 16 
   },
@@ -562,33 +639,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  mapContainer: {
-    height: 300,
-    marginBottom: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  map: {
-    flex: 1,
-  },
-  attendanceBtn: {
-    backgroundColor: '#388E3C',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    marginTop: 16,
-  },
   card: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#fff',
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
     elevation: 2,
-  },
-  selectedCard: {
-    backgroundColor: '#E3F2FD',
-    borderColor: '#1976D2',
-    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   name: { 
     fontSize: 18, 
@@ -615,33 +678,6 @@ const styles = StyleSheet.create({
     color: '#fff', 
     textAlign: 'center', 
     fontWeight: '600' 
-  },
-  viewAttendanceBtn: {
-    backgroundColor: '#FFA000',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  locationBtn: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: '#4CAF50',
-    borderRadius: 8,
-    padding: 8,
-  },
-  fitBtn: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: '#1976D2',
-    borderRadius: 8,
-    padding: 8,
-  },
-  fitBtnText: {
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: '600',
   },
   scrollContent: {
     flexGrow: 1,
@@ -673,9 +709,199 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   feedbackBtn: {
     backgroundColor: '#9C27B0',
+  },
+  statsContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 24,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  sectionHeaderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginLeft: 8,
+  },
+  statusBarsContainer: {
+    marginVertical: 15,
+  },
+  statusBarContainer: {
+    marginBottom: 15,
+  },
+  statusBar: {
+    height: 40,
+    borderRadius: 8,
+    marginBottom: 5,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    width: '100%',
+  },
+  statusBarLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  statusCountBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  statusCountText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  percentageOuterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
+  percentageContainer: {
+    height: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 4,
+    overflow: 'hidden',
+    flex: 1,
+  },
+  percentageBar: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  percentageText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#666',
+    marginLeft: 8,
+    width: 40,
+    textAlign: 'right',
+  },
+  detailedStatsContainer: {
+    marginTop: 15,
+    padding: 15,
+    borderRadius: 10,
+    backgroundColor: '#F5F5F5',
+  },
+  statusLegendHeader: {
+    marginBottom: 15,
+  },
+  detailedStatsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+  },
+  statusSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  detailedStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    padding: 10,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  statColorIndicator: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: 12,
+  },
+  statItemContent: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statItemLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  statItemValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1976D2',
+  },
+  hoursContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 24,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  hoursCardContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginTop: 10,
+  },
+  dayHoursCard: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: '#f5f7fa',
+    borderRadius: 10,
+    padding: 15,
+    marginHorizontal: 5,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  dayHoursDate: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+  },
+  dayHoursValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1976D2',
+  },
+  dayHoursLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
   },
 });

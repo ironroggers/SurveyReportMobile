@@ -19,12 +19,14 @@ import SurveyFormScreen from '../screens/SurveyFormScreen';
 import AssignLocationScreen from '../screens/AssignLocationScreen';
 import ReviewSurveyScreen from '../screens/ReviewSurveyScreen';
 import ReviewDetailsScreen from "../screens/ReviewDetailsScreen";
-import SurveyListScreen from "../screens/SurveyListScreen";
+import LocationDetailsScreen from "../screens/LocationDetailsScreen";
 
 // New Tab Screens
 import LocationAssignmentScreen from '../screens/LocationAssignmentScreen';
-import SurveyScreen from '../screens/SurveyScreen';
+import SurveyorListScreen from '../screens/SurveyorListScreen';
 import MoreScreen from '../screens/MoreScreen';
+import SurveyorLocationsScreen from '../screens/SurveyorLocationsScreen';
+import SurveyDetailsScreen from '../screens/SurveyDetailsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -54,10 +56,10 @@ function SupervisorTabs() {
         }}
       />
       <Tab.Screen 
-        name="LocationAssignment" 
-        component={SurveyScreen}
+        name="SurveyorList"
+        component={SurveyorListScreen}
         options={{
-          title: 'Assignments',
+          title: 'Surveyor',
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="location-on" color={color} size={size} />
           ),
@@ -67,7 +69,7 @@ function SupervisorTabs() {
         name="SurveyReview" 
         component={ReviewSurveyScreen} 
         options={{
-          title: 'Reviews',
+          title: 'Locations',
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="rate-review" color={color} size={size} />
           ),
@@ -113,11 +115,21 @@ function SurveyorTabs() {
       />
       <Tab.Screen 
         name="AssignmentTab" 
-        component={SurveyScreen} 
+        component={ReviewSurveyScreen}
         options={{
-          title: 'Assignment',
+          title: 'My Work',
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="assignment" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="AttendanceTab"
+        component={AttendanceScreen}
+        options={{
+          title: 'Attendance',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="clock" color={color} size={size} />
           ),
         }}
       />
@@ -194,7 +206,9 @@ export default function AppNavigator() {
           <Stack.Screen name="SurveyForm" component={SurveyFormScreen} />
           <Stack.Screen name="AssignLocation" component={AssignLocationScreen} />
           <Stack.Screen name="ReviewDetails" component={ReviewDetailsScreen} />
-          <Stack.Screen name="SurveyList" component={SurveyListScreen} />
+          <Stack.Screen name="LocationDetails" component={LocationDetailsScreen} />
+          <Stack.Screen name="SurveyorLocations" component={SurveyorLocationsScreen} />
+          <Stack.Screen name="SurveyDetails" component={SurveyDetailsScreen} />
         </>
       )}
     </Stack.Navigator>
