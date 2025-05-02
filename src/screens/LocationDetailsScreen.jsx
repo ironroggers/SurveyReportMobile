@@ -714,6 +714,17 @@ export default function LocationDetailsScreen() {
 
   // Handle survey deletion
   const handleDeleteSurvey = (surveyId) => {
+    // Check if user is a surveyor and location is active (status 3)
+    if (currentUser?.role !== 'SURVEYOR') {
+      Alert.alert('Permission Denied', 'Only surveyors can delete surveys.');
+      return;
+    }
+    
+    if (!locationData || locationData.status !== 3) {
+      Alert.alert('Action Not Allowed', 'Surveys can only be deleted when the location is in active status.');
+      return;
+    }
+
     Alert.alert(
       'Delete Survey',
       'Are you sure you want to delete this survey? This action cannot be undone.',
@@ -771,7 +782,7 @@ export default function LocationDetailsScreen() {
         </Text>
       </View>
       <View style={styles.surveyActions}>
-        {!isSupervisor && (
+        {currentUser?.role === 'SURVEYOR' && locationData?.status === 3 && (
           <TouchableOpacity 
             style={styles.deleteButton} 
             onPress={(e) => {
