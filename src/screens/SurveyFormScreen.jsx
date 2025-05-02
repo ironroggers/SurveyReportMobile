@@ -11,6 +11,7 @@ import * as FileSystem from 'expo-file-system';
 import SafeMapView from '../components/SafeMapView';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
+import AttachmentViewer from '../components/AttachmentViewer';
 
 // Custom Dropdown Component
 const CustomDropdown = ({ options, selectedValue, onValueChange, placeholder, disabled }) => {
@@ -108,6 +109,8 @@ export default function SurveyFormScreen() {
   const { currentUser } = useCurrentUser();
   const [isUploading, setIsUploading] = useState(false);
   const scrollViewRef = useRef(null);
+  const [isAttachmentViewerVisible, setIsAttachmentViewerVisible] = useState(false);
+  const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState(0);
   
   console.log("currentLocation", currentLocation, assignedLocation);
   console.log("existingSurvey", existingSurvey);
@@ -1006,7 +1009,13 @@ export default function SurveyFormScreen() {
                 mediaFiles.map((file, idx) => (
                   <View key={idx} style={styles.mediaFileContainer}>
                     {file.fileType === 'IMAGE' ? (
-                      <View style={styles.imageContainer}>
+                      <TouchableOpacity 
+                        style={styles.imageContainer}
+                        onPress={() => {
+                          setSelectedAttachmentIndex(idx);
+                          setIsAttachmentViewerVisible(true);
+                        }}
+                      >
                         <Image 
                           source={{ 
                             uri: file.url,
@@ -1043,7 +1052,7 @@ export default function SurveyFormScreen() {
                             {file.url.startsWith('http') ? '✓ Uploaded' : 'Pending Upload'}
                           </Text>
                         </View>
-                      </View>
+                      </TouchableOpacity>
                     ) : (
                       <View style={[styles.attachment, styles.fileTypeIndicator]}>
                         <Text style={styles.fileTypeText}>
@@ -1085,6 +1094,14 @@ export default function SurveyFormScreen() {
           </SafeAreaView>
         )}
       </KeyboardAvoidingView>
+
+      {/* Attachment Viewer */}
+      <AttachmentViewer
+        visible={isAttachmentViewerVisible}
+        attachments={mediaFiles}
+        initialIndex={selectedAttachmentIndex}
+        onClose={() => setIsAttachmentViewerVisible(false)}
+      />
     </View>
   );
 }

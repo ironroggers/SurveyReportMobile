@@ -16,9 +16,9 @@ import {
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { Marker, Polygon } from 'react-native-maps';
-import ImageViewing from 'react-native-image-viewing';
 import {LOCATION_URL, SURVEY_URL} from "../api-url";
 import SafeMapView from '../components/SafeMapView';
+import AttachmentViewer from '../components/AttachmentViewer';
 
 const windowWidth = Dimensions.get('window').width;
 const imageSize = 100; // Fixed size for thumbnails
@@ -35,8 +35,12 @@ export default function ReviewDetailsScreen({ route, navigation }) {
   const [comments, setComments] = useState('');
   const [actionType, setActionType] = useState(null);
   const [updating, setUpdating] = useState(false);
-  const [isImageViewVisible, setIsImageViewVisible] = useState(false);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  
+  // Prepare all media files in a flat array for the AttachmentViewer
+  const allMediaFiles = surveys.reduce((acc, survey) => [
+    ...acc,
+    ...(survey.mediaFiles || [])
+  ], []);
 
   const mapRef = React.useRef(null);
 
@@ -468,16 +472,11 @@ export default function ReviewDetailsScreen({ route, navigation }) {
         </View>
       </Modal>
 
-      <ImageViewing
-        images={surveys.reduce((acc, survey) => {
-          const images = survey.mediaFiles
-            ?.filter(file => file.fileType === 'IMAGE')
-            .map(file => ({ uri: file.url })) || [];
-          return [...acc, ...images];
-        }, [])}
-        imageIndex={selectedImageIndex}
+      <AttachmentViewer
         visible={isImageViewerVisible}
-        onRequestClose={() => setIsImageViewerVisible(false)}
+        attachments={allMediaFiles}
+        initialIndex={selectedImageIndex}
+        onClose={() => setIsImageViewerVisible(false)}
       />
     </View>
   );

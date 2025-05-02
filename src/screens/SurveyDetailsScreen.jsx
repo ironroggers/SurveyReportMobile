@@ -14,12 +14,15 @@ import { useRoute } from '@react-navigation/native';
 import { Marker } from 'react-native-maps';
 import * as ImagePicker from 'expo-image-picker';
 import SafeMapView from '../components/SafeMapView';
+import AttachmentViewer from '../components/AttachmentViewer';
 
 export default function SurveyDetailsScreen({ route, navigation }) {
   const { survey } = route.params;
 
   const [details, setDetails] = useState(survey.details || '');
   const [attachments, setAttachments] = useState(survey.attachments || []);
+  const [isAttachmentViewerVisible, setIsAttachmentViewerVisible] = useState(false);
+  const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState(0);
 
   const mapRef = React.useRef(null);
 
@@ -46,7 +49,12 @@ export default function SurveyDetailsScreen({ route, navigation }) {
     });
 
     if (!result.canceled) {
-      setAttachments([...attachments, ...result.assets]);
+      // Format the attachments to be compatible with AttachmentViewer
+      const formattedAttachments = result.assets.map(asset => ({
+        url: asset.uri,
+        fileType: 'IMAGE',
+      }));
+      setAttachments([...attachments, ...formattedAttachments]);
     }
   };
 
@@ -102,7 +110,15 @@ export default function SurveyDetailsScreen({ route, navigation }) {
 
         <View style={styles.attachmentsContainer}>
           {attachments.map((file, index) => (
-            <Image key={index} source={{ uri: file.uri }} style={styles.attachment} />
+            <TouchableOpacity 
+              key={index} 
+              onPress={() => {
+                setSelectedAttachmentIndex(index);
+                setIsAttachmentViewerVisible(true);
+              }}
+            >
+              <Image source={{ uri: file.url || file.uri }} style={styles.attachment} />
+            </TouchableOpacity>
           ))}
         </View>
 
@@ -114,6 +130,14 @@ export default function SurveyDetailsScreen({ route, navigation }) {
           <Text style={styles.btnText}>Fit All Points</Text>
         </TouchableOpacity>
       </View>
+      
+      {/* Attachment Viewer */}
+      <AttachmentViewer
+        visible={isAttachmentViewerVisible}
+        attachments={attachments}
+        initialIndex={selectedAttachmentIndex}
+        onClose={() => setIsAttachmentViewerVisible(false)}
+      />
     </ScrollView>
   );
 }
