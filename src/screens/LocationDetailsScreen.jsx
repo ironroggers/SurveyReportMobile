@@ -108,46 +108,29 @@ export default function LocationDetailsScreen() {
           return;
         }
         
-        // Extract and validate route points
+        // Extract and validate route points from the new format
         const routePoints = [];
-        data.route.forEach((segment, index) => {
-          if (segment.from_lat_long && Array.isArray(segment.from_lat_long) && segment.from_lat_long.length >= 2) {
-            const latitude = parseFloat(segment.from_lat_long[0]);
-            const longitude = parseFloat(segment.from_lat_long[1]);
+        
+        data.route.forEach((waypoint, index) => {
+          // Check if waypoint has valid latitude and longitude
+          if (waypoint.latitude !== undefined && waypoint.longitude !== undefined) {
+            const latitude = parseFloat(waypoint.latitude);
+            const longitude = parseFloat(waypoint.longitude);
             
             if (!isNaN(latitude) && !isNaN(longitude)) {
               routePoints.push({
                 latitude,
                 longitude,
-                title: segment.from_place || `Point ${index + 1}`,
-                description: segment.gram_panchayat || '',
-                id: `from-${index}`
+                title: waypoint.place || `Point ${index + 1}`,
+                description: waypoint.type || '',
+                id: `waypoint-${index}`
               });
-              console.log(`Point ${index} from:`, latitude, longitude);
+              console.log(`Point ${index}:`, latitude, longitude);
             } else {
-              console.warn(`Invalid from_lat_long at index ${index}:`, segment.from_lat_long);
+              console.warn(`Invalid coordinates at index ${index}:`, waypoint);
             }
-          }
-          
-          // Also add the last to_lat_long
-          if (index === data.route.length - 1) {
-            if (segment.to_lat_long && Array.isArray(segment.to_lat_long) && segment.to_lat_long.length >= 2) {
-              const latitude = parseFloat(segment.to_lat_long[0]);
-              const longitude = parseFloat(segment.to_lat_long[1]);
-              
-              if (!isNaN(latitude) && !isNaN(longitude)) {
-                routePoints.push({
-                  latitude,
-                  longitude,
-                  title: segment.to_place || 'End Point',
-                  description: '',
-                  id: `to-${index}`
-                });
-                console.log(`Point ${index} to:`, latitude, longitude);
-              } else {
-                console.warn(`Invalid to_lat_long at last index:`, segment.to_lat_long);
-              }
-            }
+          } else {
+            console.warn(`Missing latitude/longitude at index ${index}:`, waypoint);
           }
         });
         
@@ -728,7 +711,7 @@ export default function LocationDetailsScreen() {
     return date.toLocaleDateString();
   };
 
-  // Render survey item
+  // Updated to handle the new location schema format
   const renderSurveyItem = ({ item }) => (
     <TouchableOpacity 
       style={styles.surveyItem}
