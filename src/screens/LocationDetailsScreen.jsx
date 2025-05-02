@@ -604,46 +604,55 @@ export default function LocationDetailsScreen() {
     return poly;
   };
 
-  const handleMapPress = (event) => {
-    // Only allow selecting a location if the user is not a supervisor
-    if (!isSupervisor) {
-      const { coordinate } = event.nativeEvent;
-      setSelectedLocation(coordinate);
-    }
-  };
-
-  const handlePinLocation = () => {
+  // Updated to directly use current location
+  const handlePinLocation = async () => {
     // Only allow pinning a location if the user is not a supervisor
     if (isSupervisor) {
       Alert.alert('Permission Denied', 'Supervisors cannot pin locations. Please contact a surveyor.');
       return;
     }
     
-    if (selectedLocation) {
-      Alert.alert(
-        'Confirm Location',
-        'Do you want to pin this location?',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-          {
-            text: 'Confirm',
-            onPress: () => {
-              // Navigate to SurveyForm with the selected location
-              navigation.navigate('SurveyForm', {
-                location: selectedLocation,
-                locationData: locationData,
-                isViewOnly: false // Surveyors can edit
-              });
-            },
-          },
-        ]
-      );
-    } else {
-      Alert.alert('No Location Selected', 'Please tap on the map to select a location first.');
+    try {
+      // Request permission and get current location
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required to pin your current location.');
+        return;
+      }
+      
+      // Show loading indicator
+      setIsLoading(true);
+      
+      // Get current position
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
+      });
+      
+      const currentLocation = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude
+      };
+      
+      console.log('Using current location for survey:', currentLocation);
+      
+      // Navigate directly to SurveyForm with the current location
+      navigation.navigate('SurveyForm', {
+        location: currentLocation,
+        locationData: locationData,
+        isViewOnly: false // Surveyors can edit
+      });
+    } catch (error) {
+      console.error('Error getting current location:', error);
+      Alert.alert('Error', 'Failed to get your current location. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  // We no longer need handleMapPress to set selectedLocation for pinning
+  const handleMapPress = (event) => {
+    // This function is kept for potential future use, but we're no longer using
+    // it for the pin location feature
   };
   
   const fitAllPoints = () => {
