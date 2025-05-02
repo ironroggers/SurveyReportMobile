@@ -3,12 +3,10 @@ import { View, Text, TextInput, StyleSheet, TouchableOpacity, Image, Alert, Scro
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import uuid from 'react-native-uuid';
-import MapView, { Marker, Polygon } from 'react-native-maps';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { Picker } from '@react-native-picker/picker';
 import {SURVEY_URL} from "../api-url";
 import * as FileSystem from 'expo-file-system';
-import SafeMapView from '../components/SafeMapView';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
 import AttachmentViewer from '../components/AttachmentViewer';
@@ -96,7 +94,6 @@ export default function SurveyFormScreen() {
   const [location, setLocation] = useState(null);
   const [mediaFiles, setMediaFiles] = useState([]);
   const [details, setDetails] = useState('');
-  const [mapRegion, setMapRegion] = useState(null);
   const [title, setTitle] = useState('');
   const [terrainType, setTerrainType] = useState('URBAN');
   const [rowAuthority, setRowAuthority] = useState('NHAI');
@@ -119,7 +116,6 @@ export default function SurveyFormScreen() {
   const TERRAIN_TYPES = ['URBAN', 'RURAL', 'FOREST', 'MOUNTAIN', 'WETLAND', 'COASTAL'];
   const ROW_AUTHORITIES = ['NHAI', 'NH', 'State Highway', 'Forest', 'Municipal Coorporation', 'Municipality', 'Gram Panchayat', 'Railway', 'Private Road', 'Others'];
 
-  const mapRef = React.useRef(null);
   const { height } = Dimensions.get('window');
 
   // Populate form with existing survey data when it's provided
@@ -152,14 +148,6 @@ export default function SurveyFormScreen() {
         };
         
         setLocation(surveyLocation);
-        
-        // Set map region around the survey location
-        setMapRegion({
-          latitude: surveyLocation.latitude,
-          longitude: surveyLocation.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
       }
       
       // Load media files from the existing survey
@@ -180,13 +168,6 @@ export default function SurveyFormScreen() {
   useEffect(() => {
     if (currentLocation?.latitude && currentLocation?.longitude && !existingSurvey) {
       setLocation(currentLocation);
-      
-      setMapRegion({
-        latitude: currentLocation.latitude,
-        longitude: currentLocation.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      });
     }
   }, [currentLocation, existingSurvey]);
 
@@ -829,52 +810,6 @@ export default function SurveyFormScreen() {
     }
   };
 
-  // Ray casting algorithm to check if point is inside polygon
-  const isPointInPolygon = (point, polygon) => {
-    const x = point[0];
-    const y = point[1];
-    let inside = false;
-
-    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-      const xi = polygon[i][0];
-      const yi = polygon[i][1];
-      const xj = polygon[j][0];
-      const yj = polygon[j][1];
-
-      const intersect = ((yi > y) !== (yj > y)) &&
-        (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-        
-      if (intersect) inside = !inside;
-    }
-
-    return inside;
-  };
-
-  const fitMapToPoints = () => {
-    if (mapRef.current) {
-      const points = [];
-      
-      // Add survey point if available
-      if (location) {
-        points.push(location);
-      }
-      
-      // Add geofence points if available
-      if (assignedLocation?.geofence?.coordinates[0]?.length > 0) {
-        assignedLocation.geofence.coordinates[0].forEach(([lng, lat]) => {
-          points.push({ latitude: lat, longitude: lng });
-        });
-      }
-      
-      if (points.length > 0) {
-        mapRef.current.fitToCoordinates(points, {
-          edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-          animated: true,
-        });
-      }
-    }
-  };
-
   return (
     <View style={styles.container}>
       {/* View-only mode banner */}
@@ -902,47 +837,6 @@ export default function SurveyFormScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.mapContainer}>
-            <SafeMapView
-              ref={mapRef}
-              style={styles.map}
-              region={mapRegion}
-              showsUserLocation={true}
-              fallbackText="Map temporarily unavailable"
-              fallbackSubText="Location information will still be recorded"
-            >
-              {/* Show center marker */}
-              {location?.centerPoint?.coordinates && (
-                <Marker
-                  coordinate={{
-                    latitude: location.centerPoint.coordinates[1],
-                    longitude: location.centerPoint.coordinates[0],
-                  }}
-                  title={location.title || "Survey Location"}
-                  description={`Status: ${location.status}`}
-                  pinColor="#1976D2"
-                />
-              )}
-
-              {/* Show polygon if available */}
-              {location?.geofence?.coordinates?.[0]?.length > 0 && (
-                <Polygon
-                  coordinates={location.geofence.coordinates[0].map(([lng, lat]) => ({
-                    latitude: lat,
-                    longitude: lng,
-                  }))}
-                  strokeColor="#1976D2"
-                  fillColor="rgba(25, 118, 210, 0.2)"
-                  strokeWidth={2}
-                />
-              )}
-            </SafeMapView>
-
-            <TouchableOpacity style={styles.fitBtn} onPress={fitMapToPoints}>
-              <Ionicons name="expand" size={18} color="#fff" />
-            </TouchableOpacity>
-          </View>
-
           <View style={styles.formSection}>
             <Text style={styles.sectionTitle}>Basic Information</Text>
             
@@ -1174,20 +1068,6 @@ const styles = StyleSheet.create({
   formGroup: {
     marginBottom: 16,
   },
-  mapContainer: {
-    height: 250,
-    marginBottom: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  map: {
-    flex: 1,
-  },
   label: { 
     fontSize: 14,
     fontWeight: '500',
@@ -1397,19 +1277,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
     marginLeft: 8,
-  },
-  fitBtn: {
-    position: 'absolute',
-    bottom: 16,
-    right: 16,
-    backgroundColor: '#1976D2',
-    padding: 8,
-    borderRadius: 6,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
   },
   // View-only mode and loading overlay styles
   viewOnlyBanner: {
