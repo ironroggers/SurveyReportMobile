@@ -10,6 +10,7 @@ import axios from 'axios';
 import Constants from 'expo-constants';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
+import { MaterialIcons } from '@expo/vector-icons';
 
 // Google Maps API keys for different platforms
 const GOOGLE_MAPS_API_KEYS = {
@@ -711,6 +712,41 @@ export default function LocationDetailsScreen() {
     return date.toLocaleDateString();
   };
 
+  // Handle survey deletion
+  const handleDeleteSurvey = (surveyId) => {
+    Alert.alert(
+      'Delete Survey',
+      'Are you sure you want to delete this survey? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await axios.delete(`${SURVEY_URL}/api/surveys/${surveyId}`);
+              
+              if (response.data && response.data.success) {
+                // Remove the deleted survey from the list
+                setSurveys(prevSurveys => prevSurveys.filter(survey => survey._id !== surveyId));
+                Alert.alert('Success', 'Survey deleted successfully');
+              } else {
+                console.error('API returned unsuccessful response:', response.data);
+                Alert.alert('Error', 'Failed to delete survey');
+              }
+            } catch (error) {
+              console.error('Error deleting survey:', error);
+              Alert.alert('Error', `Failed to delete survey: ${error.message}`);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   // Updated to handle the new location schema format
   const renderSurveyItem = ({ item }) => (
     <TouchableOpacity 
@@ -734,8 +770,21 @@ export default function LocationDetailsScreen() {
           Created: {formatDate(item.createdAt)}
         </Text>
       </View>
-      <View style={styles.surveyArrow}>
-        <Text>›</Text>
+      <View style={styles.surveyActions}>
+        {!isSupervisor && (
+          <TouchableOpacity 
+            style={styles.deleteButton} 
+            onPress={(e) => {
+              e.stopPropagation();
+              handleDeleteSurvey(item._id);
+            }}
+          >
+            <MaterialIcons name="delete" size={24} color="#C62828" />
+          </TouchableOpacity>
+        )}
+        <View style={styles.surveyArrow}>
+          <Text>›</Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -1630,8 +1679,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#888',
   },
+  surveyActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    padding: 8,
+    marginRight: 5,
+  },
   surveyArrow: {
-    marginLeft: 10,
     fontSize: 20,
   },
   headerActions: {
