@@ -9,6 +9,7 @@ import { Picker } from '@react-native-picker/picker';
 import {SURVEY_URL} from "../api-url";
 import * as FileSystem from 'expo-file-system';
 import SafeMapView from '../components/SafeMapView';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 export default function SurveyFormScreen() {
   const [location, setLocation] = useState(null);
@@ -17,7 +18,7 @@ export default function SurveyFormScreen() {
   const [mapRegion, setMapRegion] = useState(null);
   const [title, setTitle] = useState('');
   const [terrainType, setTerrainType] = useState('URBAN');
-  const [elevation, setElevation] = useState('');
+  const [rowAuthority, setRowAuthority] = useState('NHAI');
   const navigation = useNavigation();
   const route = useRoute();
   const assignedLocation = route.params?.locationData;
@@ -31,6 +32,7 @@ export default function SurveyFormScreen() {
   console.log("isViewOnly mode:", isViewOnly);
 
   const TERRAIN_TYPES = ['URBAN', 'RURAL', 'FOREST', 'MOUNTAIN', 'WETLAND', 'COASTAL'];
+  const ROW_AUTHORITIES = ['NHAI', 'NH', 'State Highway', 'Forest', 'Municipal Coorporation', 'Municipality', 'Gram Panchayat', 'Railway', 'Private Road', 'Others'];
 
   const mapRef = React.useRef(null);
 
@@ -43,10 +45,17 @@ export default function SurveyFormScreen() {
       setTitle(existingSurvey.title || '');
       setDetails(existingSurvey.description || '');
       
-      // Set terrain type and elevation if available
-      if (existingSurvey.terrainData) {
+      // Set terrain type if available
+      if (existingSurvey.terrainData && existingSurvey.terrainData.type) {
         setTerrainType(existingSurvey.terrainData.type || 'URBAN');
-        setElevation(existingSurvey.terrainData.elevation?.toString() || '');
+      }
+      
+      // Set rowAuthority if available
+      if (existingSurvey.rowAuthority) {
+        setRowAuthority(existingSurvey.rowAuthority);
+      } else {
+        // Default to NHAI if not present
+        setRowAuthority('NHAI');
       }
       
       // Set location based on survey coordinates
@@ -105,17 +114,48 @@ export default function SurveyFormScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsMultipleSelection: true,
-      quality: 0.7,
+      quality: 0.5, // Reduced quality for better upload performance
+      allowsEditing: false,
+      exif: false, // Don't need EXIF data
     });
 
     if (!result.canceled) {
-      const newMediaFiles = result.assets.map(asset => ({
-        url: asset.uri,
-        fileType: getFileType(asset.type || getMimeType(asset.uri)),
-        description: '',
-        uploaded_at: new Date()
-      }));
-      setMediaFiles([...mediaFiles, ...newMediaFiles]);
+      // Show file size warning for large files
+      const largeFiles = result.assets.filter(asset => asset.fileSize && asset.fileSize > 5000000); // 5MB
+      if (largeFiles.length > 0) {
+        Alert.alert(
+          'Large File Warning',
+          'Some selected files are large and may take longer to upload. Do you want to continue?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Continue',
+              onPress: () => {
+                const newMediaFiles = result.assets.map(asset => ({
+                  url: asset.uri,
+                  fileType: getFileType(asset.type || getMimeType(asset.uri)),
+                  description: '',
+                  fileSize: asset.fileSize,
+                  uploaded_at: new Date()
+                }));
+                setMediaFiles([...mediaFiles, ...newMediaFiles]);
+              }
+            }
+          ]
+        );
+      } else {
+        const newMediaFiles = result.assets.map(asset => ({
+          url: asset.uri,
+          fileType: getFileType(asset.type || getMimeType(asset.uri)),
+          description: '',
+          fileSize: asset.fileSize,
+          uploaded_at: new Date()
+        }));
+        setMediaFiles([...mediaFiles, ...newMediaFiles]);
+      }
     }
   };
 
@@ -166,6 +206,11 @@ export default function SurveyFormScreen() {
         throw new Error('File does not exist');
       }
 
+      // Check if file is very large and might need extra handling
+      if (fileInfo.size > 10000000) { // 10MB
+        console.log('Very large file detected:', fileInfo.size, 'bytes');
+      }
+
       // Get the file name from the URI
       const fileName = fileUri.split('/').pop();
       
@@ -173,14 +218,33 @@ export default function SurveyFormScreen() {
       const mimeType = getMimeType(fileName);
       // Determine file type based on mime type
       const fileType = getFileType(mimeType);
-      console.log('Uploading file:', { fileName, fileType, mimeType });
+      console.log('Uploading file:', { fileName, fileType, mimeType, size: fileInfo.size });
+      
+      // For images, try to compress them before uploading
+      let finalUri = fileUri;
+      if (fileType === 'IMAGE' && fileInfo.size > 1000000) { // 1MB
+        try {
+          console.log('Compressing image before upload...');
+          const manipResult = await ImageManipulator.manipulateAsync(
+            fileUri,
+            [{ resize: { width: 1200 } }], // resize to max width of 1200px while maintaining aspect ratio
+            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+          );
+          finalUri = manipResult.uri;
+          const compressedInfo = await FileSystem.getInfoAsync(finalUri);
+          console.log('Compressed image size:', compressedInfo.size, 'bytes (original was', fileInfo.size, 'bytes)');
+        } catch (compressError) {
+          console.log('Image compression failed, using original:', compressError);
+          // Continue with original file if compression fails
+        }
+      }
       
       // Create form data
       const formData = new FormData();
       
       // Properly format the file object for multipart/form-data
       formData.append('file', {
-        uri: Platform.OS === 'ios' ? fileUri.replace('file://', '') : fileUri,
+        uri: Platform.OS === 'ios' ? finalUri.replace('file://', '') : finalUri,
         type: mimeType,
         name: fileName,
       });
@@ -189,16 +253,14 @@ export default function SurveyFormScreen() {
       
       // Upload to your server with timeout and better error handling
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout (increased from 30s)
+      
       try {
+        // First attempt to use fetch for upload
         const response = await fetch(`${SURVEY_URL}/api/upload`, {
           method: 'POST',
           body: formData,
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            // Don't set Content-Type header, let fetch set it with the boundary
-          },
+          // Don't set Content-Type header, let fetch set it with the boundary automatically
           signal: controller.signal
         });
 
@@ -237,6 +299,45 @@ export default function SurveyFormScreen() {
         if (error.name === 'AbortError') {
           throw new Error('Upload timed out. Please check your internet connection and try again.');
         }
+        
+        // Try fallback upload method using FileSystem.uploadAsync for certain types of failures
+        if (error.message && (error.message.includes('Network request failed') || error.message.includes('timed out'))) {
+          console.log('Trying fallback upload method...');
+          try {
+            // If available, try using FileSystem.uploadAsync as a fallback
+            if (FileSystem.uploadAsync) {
+              const uploadResponse = await FileSystem.uploadAsync(`${SURVEY_URL}/api/upload`, finalUri, {
+                httpMethod: 'POST',
+                uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+                fieldName: 'file',
+                mimeType: mimeType,
+                parameters: { fileName: fileName }
+              });
+              
+              console.log('Fallback upload response:', uploadResponse);
+              
+              if (uploadResponse.status >= 200 && uploadResponse.status < 300) {
+                let responseData;
+                try {
+                  responseData = JSON.parse(uploadResponse.body);
+                  if (responseData && responseData.data && responseData.data.url) {
+                    return {
+                      url: responseData.data.url,
+                      fileType: responseData.data.fileType || fileType || 'DOCUMENT',
+                      description: '',
+                      uploaded_at: new Date()
+                    };
+                  }
+                } catch (e) {
+                  console.log('Failed to parse fallback response:', e);
+                }
+              }
+            }
+          } catch (fallbackError) {
+            console.log('Fallback upload method failed:', fallbackError);
+          }
+        }
+        
         throw error;
       } finally {
         clearTimeout(timeoutId);
@@ -255,252 +356,369 @@ export default function SurveyFormScreen() {
     const isUpdate = route.params?.existingSurvey && route.params.existingSurvey._id;
     const hasExistingImages = isUpdate && existingSurvey.mediaFiles && existingSurvey.mediaFiles.length > 0;
     
-    if (!location || (!hasExistingImages && mediaFiles.length === 0) || !details || !title || !elevation) {
-      Alert.alert('Incomplete', 'Please fill all required fields (title, location, attachments, elevation, and details).');
-      return;
-    }
-
-    try {
-      setIsUploading(true);
-
-      // First, upload all media files
-      const uploadedMediaFiles = [];
-      let uploadErrors = 0;
-      
-      // First add all existing remote media files (already uploaded)
-      const existingRemoteFiles = mediaFiles.filter(file => file.url.startsWith('http'));
-      console.log(`Found ${existingRemoteFiles.length} already uploaded files`);
-      existingRemoteFiles.forEach(file => {
-        uploadedMediaFiles.push({
-          ...file,
-          fileType: file.fileType || getFileType(getMimeType(file.url)) || 'DOCUMENT',
-        });
-      });
-
-      // Then try to upload new local files
-      const newLocalFiles = mediaFiles.filter(file => !file.url.startsWith('http'));
-      console.log(`Attempting to upload ${newLocalFiles.length} new files`);
-      
-      if (newLocalFiles.length > 0) {
-        for (const file of newLocalFiles) {
-          try {
-            const uploadResult = await uploadFile(file.url);
-            if (uploadResult) {
-              uploadedMediaFiles.push({
-                ...uploadResult,
-                description: file.description || '',
-                fileType: uploadResult.fileType || file.fileType || 'DOCUMENT',
-              });
-            } else {
-              uploadErrors++;
-              console.log('Upload returned null result for file:', file.url);
-            }
-          } catch (error) {
-            uploadErrors++;
-            console.log('Error uploading file:', file.url, error);
-            
-            // For network errors, offer retry or continue
-            if (error.message && error.message.includes('Network request failed')) {
-              const decision = await new Promise(resolve => {
-                Alert.alert(
-                  'Network Error',
-                  'Failed to upload image due to network issues. Would you like to retry, continue without this image, or cancel?',
-                  [
-                    {
-                      text: 'Cancel',
-                      style: 'cancel',
-                      onPress: () => resolve('cancel')
-                    },
-                    {
-                      text: 'Continue Without Image',
-                      onPress: () => resolve('continue')
-                    },
-                    {
-                      text: 'Retry',
-                      onPress: () => resolve('retry')
-                    }
-                  ]
-                );
-              });
-              
-              if (decision === 'cancel') {
-                setIsUploading(false);
-                return;
-              } else if (decision === 'retry') {
-                try {
-                  console.log('Retrying upload...');
-                  const retryResult = await uploadFile(file.url);
-                  if (retryResult) {
-                    uploadedMediaFiles.push({
-                      ...retryResult,
-                      description: file.description || '',
-                      fileType: retryResult.fileType || file.fileType || 'DOCUMENT',
-                    });
-                    uploadErrors--; // Decrease error count on success
-                  }
-                } catch (retryError) {
-                  console.log('Retry failed:', retryError);
-                  // Continue without this file
-                }
-              }
-              // If 'continue' is selected, we just move on
-            } else {
-              // For other errors, just ask if user wants to continue
-              const shouldContinue = await new Promise(resolve => {
-                Alert.alert(
-                  'Upload Error',
-                  `Failed to upload file: ${error.message}. Would you like to continue without this file?`,
-                  [
-                    {
-                      text: 'Cancel',
-                      style: 'cancel',
-                      onPress: () => resolve(false)
-                    },
-                    {
-                      text: 'Continue',
-                      onPress: () => resolve(true)
-                    }
-                  ]
-                );
-              });
-              
-              if (!shouldContinue) {
-                setIsUploading(false);
-                return;
-              }
-            }
-          }
-        }
-      }
-      
-      // Warn user if we're proceeding with no images (only for new surveys)
-      if (uploadedMediaFiles.length === 0 && !isUpdate) {
+    // Basic validation for required fields
+    const missingFields = [];
+    if (!title) missingFields.push('title');
+    if (!location) missingFields.push('location');
+    if (!details) missingFields.push('details');
+    if (!rowAuthority) missingFields.push('row authority');
+    if (!hasExistingImages && mediaFiles.length === 0) missingFields.push('images');
+    
+    if (missingFields.length > 0) {
+      if (missingFields.includes('images') && (!isUpdate || !hasExistingImages)) {
+        // Special handling for the case when only images are missing
         Alert.alert(
-          'No Images',
-          'You are creating a survey without any images. Do you want to continue?',
+          'No Images Selected',
+          'Do you want to proceed without adding any images?',
           [
             {
               text: 'Cancel',
-              style: 'cancel',
-              onPress: () => {
-                setIsUploading(false);
-                return;
-              }
+              style: 'cancel'
             },
             {
-              text: 'Continue',
-              onPress: () => console.log('Continuing without images')
+              text: 'Continue Without Images',
+              onPress: () => continueSubmission(true)
             }
           ]
         );
-      }
-      
-      // Warn if some uploads failed
-      if (uploadErrors > 0) {
-        console.log(`${uploadErrors} out of ${newLocalFiles.length} uploads failed`);
-        if (uploadedMediaFiles.length === 0 && !hasExistingImages) {
-          Alert.alert('Warning', 'All uploads failed. Please check your internet connection and try again.');
-          setIsUploading(false);
-          return;
-        }
-      }
-
-      // Create survey data according to new schema
-      const surveyData = {
-        title,
-        description: details,
-        location: assignedLocation._id,
-        // Store coordinates in [latitude, longitude] format as required by the new schema
-        // If we're updating and the current location comes from an existing survey, use that
-        latlong: existingSurvey && !currentLocation ? 
-          existingSurvey.latlong : 
-          [location?.latitude || 0, location?.longitude || 0],
-        created_by: existingSurvey?.created_by?._id || currentUser?._id,
-        updated_by: currentUser?._id,
-        terrainData: {
-          type: terrainType,
-          elevation: parseInt(elevation)
-        },
-        mediaFiles: uploadedMediaFiles,
-        status: existingSurvey?.status || 1
-      };
-
-      console.log('Sending survey data:', surveyData);
-      
-      // Validate that we have a valid ID for updates
-      if (isUpdate) {
-        console.log(`Updating existing survey with ID: ${route.params.existingSurvey._id}`);
+        return;
       } else {
-        console.log('Creating new survey');
+        Alert.alert('Incomplete', `Please fill all required fields: ${missingFields.join(', ')}.`);
+        return;
       }
-      
-      const url = isUpdate 
-        ? `${SURVEY_URL}/api/surveys/${route.params.existingSurvey._id}`
-        : `${SURVEY_URL}/api/surveys`;
-      
-      const method = isUpdate ? 'PUT' : 'POST';
-      console.log(`Making ${method} request to ${url}`);
-      console.log('Request payload:', JSON.stringify(surveyData, null, 2));
-
+    }
+    
+    // Continue with submission if all required fields are filled
+    continueSubmission();
+    
+    async function continueSubmission(skipImageCheck = false) {
       try {
-        const response = await fetch(url, {
-          method: method,
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(surveyData)
+        setIsUploading(true);
+  
+        // First, upload all media files
+        const uploadedMediaFiles = [];
+        let uploadErrors = 0;
+        
+        // First add all existing remote media files (already uploaded)
+        const existingRemoteFiles = mediaFiles.filter(file => file.url.startsWith('http'));
+        console.log(`Found ${existingRemoteFiles.length} already uploaded files`);
+        existingRemoteFiles.forEach(file => {
+          uploadedMediaFiles.push({
+            ...file,
+            fileType: file.fileType || getFileType(getMimeType(file.url)) || 'DOCUMENT',
+          });
         });
   
-        console.log('Response status:', response.status);
+        // Then try to upload new local files
+        const newLocalFiles = mediaFiles.filter(file => !file.url.startsWith('http'));
+        console.log(`Attempting to upload ${newLocalFiles.length} new files`);
         
-        if (!response.ok) {
-          const errorData = await response.json().catch(e => ({ message: 'Failed to parse error response' }));
-          console.log('Error response:', errorData);
-          Alert.alert('Error', `Failed to submit survey: ${errorData.message || response.status}`);
-          setIsUploading(false);
-          return;
+        if (newLocalFiles.length > 0) {
+          // Sort files by size for better upload sequence (smallest first)
+          newLocalFiles.sort((a, b) => {
+            return (a.fileSize || 0) - (b.fileSize || 0);
+          });
+          
+          for (const file of newLocalFiles) {
+            try {
+              // Log upload attempt
+              console.log(`Attempting to upload file: ${file.url.split('/').pop()}`);
+              
+              const uploadResult = await uploadFile(file.url);
+              if (uploadResult) {
+                uploadedMediaFiles.push({
+                  ...uploadResult,
+                  description: file.description || '',
+                  fileType: uploadResult.fileType || file.fileType || 'DOCUMENT',
+                });
+                console.log(`Successfully uploaded file: ${file.url.split('/').pop()}`);
+              } else {
+                uploadErrors++;
+                console.log('Upload returned null result for file:', file.url);
+              }
+            } catch (error) {
+              uploadErrors++;
+              console.log('Error uploading file:', file.url.split('/').pop(), error);
+              
+              // For network errors, offer retry or continue
+              if (error.message && (error.message.includes('Network request failed') || 
+                                    error.message.includes('timed out'))) {
+                const decision = await new Promise(resolve => {
+                  Alert.alert(
+                    'Network Error',
+                    'Failed to upload image due to network issues. Would you like to retry, continue without this image, or cancel?',
+                    [
+                      {
+                        text: 'Cancel Entire Submission',
+                        style: 'cancel',
+                        onPress: () => resolve('cancel')
+                      },
+                      {
+                        text: 'Skip This Image',
+                        onPress: () => resolve('continue')
+                      },
+                      {
+                        text: 'Retry Upload',
+                        onPress: () => resolve('retry')
+                      }
+                    ]
+                  );
+                });
+                
+                if (decision === 'cancel') {
+                  setIsUploading(false);
+                  return;
+                } else if (decision === 'retry') {
+                  try {
+                    console.log('Retrying upload...');
+                    const retryResult = await uploadFile(file.url);
+                    if (retryResult) {
+                      uploadedMediaFiles.push({
+                        ...retryResult,
+                        description: file.description || '',
+                        fileType: retryResult.fileType || file.fileType || 'DOCUMENT',
+                      });
+                      uploadErrors--; // Decrease error count on success
+                      console.log(`Successfully uploaded file on retry: ${file.url.split('/').pop()}`);
+                    }
+                  } catch (retryError) {
+                    console.log('Retry failed:', retryError);
+                    // Continue without this file
+                  }
+                }
+                // If 'continue' is selected, we just move on
+              } else {
+                // For other errors, just ask if user wants to continue
+                const shouldContinue = await new Promise(resolve => {
+                  Alert.alert(
+                    'Upload Error',
+                    `Failed to upload file: ${error.message}. Would you like to continue without this file?`,
+                    [
+                      {
+                        text: 'Cancel Submission',
+                        style: 'cancel',
+                        onPress: () => resolve(false)
+                      },
+                      {
+                        text: 'Continue Without This File',
+                        onPress: () => resolve(true)
+                      }
+                    ]
+                  );
+                });
+                
+                if (!shouldContinue) {
+                  setIsUploading(false);
+                  return;
+                }
+              }
+            }
+          }
+        }
+        
+        // Check if we should continue with no images
+        if (uploadedMediaFiles.length === 0 && !skipImageCheck && !hasExistingImages) {
+          const shouldContinue = await new Promise(resolve => {
+            Alert.alert(
+              'No Images',
+              'You are creating a survey without any images. This is not recommended. Do you want to continue anyway?',
+              [
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                  onPress: () => resolve(false)
+                },
+                {
+                  text: 'Continue Without Images',
+                  onPress: () => resolve(true)
+                }
+              ]
+            );
+          });
+          
+          if (!shouldContinue) {
+            setIsUploading(false);
+            return;
+          }
+        }
+        
+        // Warn if some uploads failed
+        if (uploadErrors > 0) {
+          console.log(`${uploadErrors} out of ${newLocalFiles.length} uploads failed`);
+          
+          if (uploadedMediaFiles.length === 0 && !hasExistingImages && !skipImageCheck) {
+            const shouldContinue = await new Promise(resolve => {
+              Alert.alert(
+                'Upload Failures',
+                'All uploads failed. You can continue without images or cancel to try again later.',
+                [
+                  {
+                    text: 'Cancel',
+                    style: 'cancel',
+                    onPress: () => resolve(false)
+                  },
+                  {
+                    text: 'Continue Without Images',
+                    onPress: () => resolve(true)
+                  }
+                ]
+              );
+            });
+            
+            if (!shouldContinue) {
+              setIsUploading(false);
+              return;
+            }
+          } else if (uploadErrors > 0) {
+            // Just notify that some uploads failed
+            Alert.alert(
+              'Some Uploads Failed',
+              `${uploadErrors} out of ${newLocalFiles.length} files could not be uploaded. Continuing with the successfully uploaded files.`,
+              [{ text: 'OK' }]
+            );
+          }
         }
   
-        const result = await response.json();
-        console.log('Survey successfully submitted/updated:', result.data);
+        // Create survey data according to new schema
+        const surveyData = {
+          title,
+          description: details,
+          location: assignedLocation._id,
+          // Store coordinates in [latitude, longitude] format as required by the new schema
+          // If we're updating and the current location comes from an existing survey, use that
+          latlong: existingSurvey && !currentLocation ? 
+            existingSurvey.latlong : 
+            [location?.latitude || 0, location?.longitude || 0],
+          created_by: existingSurvey?.created_by?._id || currentUser?._id,
+          updated_by: currentUser?._id,
+          terrainData: {
+            type: terrainType
+          },
+          rowAuthority: rowAuthority,
+          mediaFiles: uploadedMediaFiles,
+          status: existingSurvey?.status || 1
+        };
+  
+        console.log('Sending survey data:', surveyData);
         
-        // Ensure we're passing the new survey data back to the LocationDetails screen
-        if (result.data) {
-          // Get the previous screen from the navigation state
-          const navState = navigation.getState();
-          const prevRoute = navState.routes[navState.index - 1];
+        // Validate that we have a valid ID for updates
+        if (isUpdate) {
+          console.log(`Updating existing survey with ID: ${route.params.existingSurvey._id}`);
+        } else {
+          console.log('Creating new survey');
+        }
+        
+        const url = isUpdate 
+          ? `${SURVEY_URL}/api/surveys/${route.params.existingSurvey._id}`
+          : `${SURVEY_URL}/api/surveys`;
+        
+        const method = isUpdate ? 'PUT' : 'POST';
+        console.log(`Making ${method} request to ${url}`);
+  
+        try {
+          // Add a retry mechanism for the survey submission
+          let retryCount = 0;
+          const maxRetries = 2;
+          let response = null;
           
-          // If previous screen is LocationDetails, set the newSurvey param
-          if (prevRoute && prevRoute.name === 'LocationDetails') {
-            // Set the survey data as a param for the previous screen
-            navigation.setParams({ newSurvey: result.data });
+          while (retryCount <= maxRetries && !response) {
+            try {
+              response = await fetch(url, {
+                method: method,
+                headers: {
+                  'Accept': 'application/json',
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(surveyData)
+              });
+            } catch (fetchError) {
+              console.log(`Attempt ${retryCount + 1} failed:`, fetchError);
+              retryCount++;
+              
+              if (retryCount <= maxRetries) {
+                console.log(`Retrying submission (${retryCount}/${maxRetries})...`);
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+              } else {
+                throw fetchError; // Throw the error after all retries fail
+              }
+            }
+          }
+          
+          if (!response) {
+            throw new Error('Failed to submit survey after multiple attempts');
+          }
+    
+          console.log('Response status:', response.status);
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(e => ({ message: 'Failed to parse error response' }));
+            console.log('Error response:', errorData);
+            Alert.alert('Error', `Failed to submit survey: ${errorData.message || response.status}`);
+            setIsUploading(false);
+            return;
+          }
+    
+          const result = await response.json();
+          console.log('Survey successfully submitted/updated:', result.data);
+          
+          // Ensure we're passing the new survey data back to the LocationDetails screen
+          if (result.data) {
+            // Get the previous screen from the navigation state
+            const navState = navigation.getState();
+            const prevRoute = navState.routes[navState.index - 1];
             
-            // Navigate back with the updated survey data
-            navigation.goBack()
+            // If previous screen is LocationDetails, set the newSurvey param
+            if (prevRoute && prevRoute.name === 'LocationDetails') {
+              // Set the survey data as a param for the previous screen
+              navigation.setParams({ newSurvey: result.data });
+              
+              // Navigate back with the updated survey data
+              navigation.goBack()
+            } else {
+              // Just go back if not from LocationDetails
+              navigation.goBack();
+            }
           } else {
-            // Just go back if not from LocationDetails
             navigation.goBack();
           }
-        } else {
-          navigation.goBack();
+        } catch (networkError) {
+          console.log('Network error during survey submission:', networkError);
+          
+          const decision = await new Promise(resolve => {
+            Alert.alert(
+              'Network Error',
+              'Failed to submit survey due to network issues. Would you like to try again?',
+              [
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                  onPress: () => resolve('cancel')
+                },
+                {
+                  text: 'Try Again',
+                  onPress: () => resolve('retry')
+                }
+              ]
+            );
+          });
+          
+          if (decision === 'retry') {
+            // Wait a bit before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Call continueSubmission again to retry submission
+            continueSubmission(true); // Skip image check on retry
+            return;
+          }
         }
-      } catch (networkError) {
-        console.log('Network error during survey submission:', networkError);
+      } catch (error) {
+        console.log('Error in handleSubmit:', error);
         Alert.alert(
-          'Network Error',
-          'Failed to submit survey due to network issues. Please check your connection and try again.',
-          [{ text: 'OK' }]
+          'Error',
+          `Failed to ${route.params?.existingSurvey ? 'update' : 'create'} survey: ${error.message}`
         );
+      } finally {
+        setIsUploading(false);
       }
-    } catch (error) {
-      console.log('Error in handleSubmit:', error);
-      Alert.alert(
-        'Error',
-        `Failed to ${route.params?.existingSurvey ? 'update' : 'create'} survey: ${error.message}`
-      );
-    } finally {
-      setIsUploading(false);
     }
   };
 
@@ -556,6 +774,14 @@ export default function SurveyFormScreen() {
       {isViewOnly && (
         <View style={styles.viewOnlyBanner}>
           <Text style={styles.viewOnlyText}>View Only Mode - Editing not allowed</Text>
+        </View>
+      )}
+      
+      {/* Loading overlay */}
+      {isUploading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#1976D2" />
+          <Text style={styles.loadingText}>Uploading files and submitting survey...</Text>
         </View>
       )}
       
@@ -630,20 +856,24 @@ export default function SurveyFormScreen() {
         </Picker>
       </View>
 
-      <Text style={styles.label}>Elevation (meters)</Text>
-      <TextInput
-        style={[styles.titleInput, isViewOnly && styles.disabledInput]}
-        placeholder="Enter elevation in meters"
-        value={elevation}
-        onChangeText={setElevation}
-        keyboardType="numeric"
-        editable={!isViewOnly}
-      />
+      <Text style={styles.label}>Right of Way Authority</Text>
+      <View style={[styles.pickerContainer, isViewOnly && styles.disabledInput]}>
+        <Picker
+          selectedValue={rowAuthority}
+          onValueChange={(value) => setRowAuthority(value)}
+          style={styles.picker}
+          enabled={!isViewOnly}
+        >
+          {ROW_AUTHORITIES.map((authority) => (
+            <Picker.Item key={authority} label={authority} value={authority} />
+          ))}
+        </Picker>
+      </View>
 
       <Text style={styles.label}>Survey Details</Text>
       <TextInput
         style={[styles.input, isViewOnly && styles.disabledInput]}
-        placeholder="Enter terrain, elevation, infra info..."
+        placeholder="Enter terrain, infrastructure info..."
         multiline
         value={details}
         onChangeText={setDetails}
@@ -886,5 +1116,24 @@ const styles = StyleSheet.create({
   },
   disabledInput: {
     backgroundColor: '#f0f0f0',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    zIndex: 1000,
+    elevation: 5,
+    height: '100%',
+    width: '100%',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 10,
   },
 });
