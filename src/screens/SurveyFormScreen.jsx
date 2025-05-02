@@ -1610,12 +1610,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     padding: 4,
   },
-  imageStatusContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-  },
   imageStatus: {
     color: '#fff',
     fontSize: 10,
