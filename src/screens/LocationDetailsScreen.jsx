@@ -728,7 +728,7 @@ export default function LocationDetailsScreen() {
       <View style={styles.surveyContent}>
         <Text style={styles.surveyTitle}>{item.title || 'Untitled Survey'}</Text>
         <Text style={styles.surveyDetails}>
-          {item.terrainData?.type || 'Unknown terrain'} · {item.terrainData?.elevation || '?'}m elevation
+          {item.terrainData?.type || 'Unknown terrain'} · {item?.rowAuthority || '--'}
         </Text>
         <Text style={styles.surveyDate}>
           Created: {formatDate(item.createdAt)}
