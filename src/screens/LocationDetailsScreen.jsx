@@ -61,6 +61,11 @@ export default function LocationDetailsScreen() {
   const [surveyors, setSurveyors] = useState([]);
   const [loadingSurveyors, setLoadingSurveyors] = useState(false);
   
+  // New state variables for reportees
+  const [reportees, setReportees] = useState([]);
+  const [selectedReportee, setSelectedReportee] = useState(null);
+  const [loadingReportees, setLoadingReportees] = useState(false);
+  
   // Track whether the submit button is visible for debugging
   const [buttonVisible, setButtonVisible] = useState(true);
   
@@ -828,10 +833,12 @@ export default function LocationDetailsScreen() {
           user.status === 1 && user.role === 'SURVEYOR'
         );
         setSurveyors(activeSurveyors);
+        setReportees(activeSurveyors); // Set reportees to the same list
         
-        // Set default selected surveyor if available
+        // Set default selected surveyor and reportee if available
         if (activeSurveyors.length > 0) {
           setSelectedSurveyor(activeSurveyors[0]._id);
+          setSelectedReportee(activeSurveyors[0]._id);
         }
       }
     } catch (error) {
@@ -872,6 +879,11 @@ export default function LocationDetailsScreen() {
       return;
     }
 
+    if (!selectedReportee) {
+      Alert.alert('Error', 'Please select a reportee');
+      return;
+    }
+
     // Calculate due date string in YYYY-MM-DD format
     const formattedDueDate = dueDate.toISOString().split('T')[0];
 
@@ -894,6 +906,7 @@ export default function LocationDetailsScreen() {
               console.log("Assign Location Payload :", {
                 surveyor: selectedSurveyor,
                 assigned_to: selectedSurveyor,
+                reportee: selectedReportee,
                 supervisor: currentUser?._id,
                 due_date: formattedDueDate,
                 status: 2 // Mark as assigned
@@ -901,6 +914,7 @@ export default function LocationDetailsScreen() {
               const response = await axios.put(`${LOCATION_URL}/api/locations/${locationId}`, {
                 surveyor: selectedSurveyor,
                 assigned_to: selectedSurveyor,
+                reportee: selectedReportee,
                 supervisor: currentUser?._id,
                 due_date: formattedDueDate,
                 status: 2 // Mark as assigned
@@ -1403,6 +1417,32 @@ export default function LocationDetailsScreen() {
                 </View>
               ) : (
                 <Text style={styles.noSurveyorsText}>No surveyors available</Text>
+              )}
+            </View>
+            
+            {/* Reportee Dropdown */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Assign to Reportee:</Text>
+              {loadingSurveyors ? (
+                <ActivityIndicator size="small" color="#2196F3" />
+              ) : reportees.length > 0 ? (
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={selectedReportee}
+                    onValueChange={(itemValue) => setSelectedReportee(itemValue)}
+                    style={styles.picker}
+                  >
+                    {reportees.map(reportee => (
+                      <Picker.Item 
+                        key={reportee._id} 
+                        label={reportee.username || reportee.email || 'Unknown'} 
+                        value={reportee._id} 
+                      />
+                    ))}
+                  </Picker>
+                </View>
+              ) : (
+                <Text style={styles.noSurveyorsText}>No reportees available</Text>
               )}
             </View>
             

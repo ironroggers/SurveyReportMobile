@@ -205,6 +205,27 @@ export default function SurveyFormScreen() {
       exif: false, // Don't need EXIF data
     });
 
+    processSelectedMedia(result);
+  };
+
+  const handleTakePicture = async () => {
+    const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!cameraPermission.granted) {
+      Alert.alert('Permission Denied', 'Allow access to camera to take pictures.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.5,
+      exif: false,
+    });
+
+    processSelectedMedia(result);
+  };
+
+  const processSelectedMedia = (result) => {
     if (!result.canceled) {
       // Show file size warning for large files
       const largeFiles = result.assets.filter(asset => asset.fileSize && asset.fileSize > 5000000); // 5MB
@@ -991,16 +1012,26 @@ export default function SurveyFormScreen() {
           <View style={styles.formSection}>
             <View style={styles.sectionTitleRow}>
               <Text style={styles.sectionTitle}>Attachments</Text>
-              {!isViewOnly && (
+            </View>
+            
+            {!isViewOnly && (
+              <View style={styles.attachmentActions}>
                 <TouchableOpacity 
                   style={styles.attachmentButton} 
                   onPress={handleUploadAttachments}
                 >
-                  <Ionicons name="camera" size={18} color="#fff" />
-                  <Text style={styles.attachmentButtonText}>Add Files</Text>
+                  <Ionicons name="images" size={18} color="#fff" />
+                  <Text style={styles.attachmentButtonText}>Gallery</Text>
                 </TouchableOpacity>
-              )}
-            </View>
+                <TouchableOpacity 
+                  style={[styles.attachmentButton, styles.cameraButton]} 
+                  onPress={handleTakePicture}
+                >
+                  <Ionicons name="camera" size={18} color="#fff" />
+                  <Text style={styles.attachmentButtonText}>Camera</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             <View style={styles.attachmentsContainer}>
               {mediaFiles.length === 0 ? (
@@ -1241,13 +1272,28 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   // Attachment styles
+  attachmentButtonsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  attachmentActions: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    justifyContent: 'flex-start',
+  },
   attachmentButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#1976D2',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 6,
+    marginRight: 12,
+    minWidth: 90,
+    justifyContent: 'center',
+  },
+  cameraButton: {
+    backgroundColor: '#388E3C',
   },
   attachmentButtonText: {
     color: '#fff',
