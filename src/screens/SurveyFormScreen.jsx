@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Image, Alert, ScrollView, Dimensions, Platform, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Image, Alert, ScrollView, Modal, Platform, ActivityIndicator, SafeAreaView, Dimensions, KeyboardAvoidingView, FlatList } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import uuid from 'react-native-uuid';
@@ -10,6 +10,86 @@ import {SURVEY_URL} from "../api-url";
 import * as FileSystem from 'expo-file-system';
 import SafeMapView from '../components/SafeMapView';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { Ionicons } from '@expo/vector-icons';
+
+// Custom Dropdown Component
+const CustomDropdown = ({ options, selectedValue, onValueChange, placeholder, disabled }) => {
+  const [visible, setVisible] = useState(false);
+  const [selectedOption, setSelectedOption] = useState(
+    options.find(option => option === selectedValue) || null
+  );
+
+  useEffect(() => {
+    const option = options.find(option => option === selectedValue);
+    setSelectedOption(option);
+  }, [selectedValue, options]);
+
+  const toggleDropdown = () => {
+    if (disabled) return;
+    setVisible(!visible);
+  };
+
+  const onItemPress = (item) => {
+    setSelectedOption(item);
+    onValueChange(item);
+    setVisible(false);
+  };
+
+  const renderItem = ({ item }) => (
+    <TouchableOpacity 
+      style={styles.dropdownItem} 
+      onPress={() => onItemPress(item)}
+    >
+      <Text style={[
+        styles.dropdownItemText,
+        selectedOption === item && styles.dropdownItemSelected
+      ]}>
+        {item}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={[styles.dropdownContainer, disabled && styles.disabledInput]}>
+      <TouchableOpacity 
+        style={styles.dropdownButton} 
+        onPress={toggleDropdown}
+        disabled={disabled}
+      >
+        <Text style={styles.dropdownButtonText}>
+          {selectedOption || placeholder || 'Select an option'}
+        </Text>
+        <Ionicons 
+          name={visible ? "chevron-up" : "chevron-down"} 
+          size={20} 
+          color="#555"
+        />
+      </TouchableOpacity>
+      
+      <Modal
+        visible={visible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.dropdownOverlay}
+          activeOpacity={1}
+          onPress={() => setVisible(false)}
+        >
+          <View style={styles.dropdownModal}>
+            <FlatList
+              data={options}
+              renderItem={renderItem}
+              keyExtractor={(item) => item}
+              showsVerticalScrollIndicator={false}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  );
+};
 
 export default function SurveyFormScreen() {
   const [location, setLocation] = useState(null);
@@ -27,6 +107,8 @@ export default function SurveyFormScreen() {
   const isViewOnly = route.params?.isViewOnly || false; // Default to false (edit mode)
   const { currentUser } = useCurrentUser();
   const [isUploading, setIsUploading] = useState(false);
+  const scrollViewRef = useRef(null);
+  
   console.log("currentLocation", currentLocation, assignedLocation);
   console.log("existingSurvey", existingSurvey);
   console.log("isViewOnly mode:", isViewOnly);
@@ -35,6 +117,7 @@ export default function SurveyFormScreen() {
   const ROW_AUTHORITIES = ['NHAI', 'NH', 'State Highway', 'Forest', 'Municipal Coorporation', 'Municipality', 'Gram Panchayat', 'Railway', 'Private Road', 'Others'];
 
   const mapRef = React.useRef(null);
+  const { height } = Dimensions.get('window');
 
   // Populate form with existing survey data when it's provided
   useEffect(() => {
@@ -769,7 +852,7 @@ export default function SurveyFormScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <View style={styles.container}>
       {/* View-only mode banner */}
       {isViewOnly && (
         <View style={styles.viewOnlyBanner}>
@@ -785,255 +868,396 @@ export default function SurveyFormScreen() {
         </View>
       )}
       
-      <View style={styles.mapContainer}>
-        <SafeMapView
-          style={styles.map}
-          region={mapRegion}
-          showsUserLocation={true}
-          fallbackText="Map temporarily unavailable"
-          fallbackSubText="Location information will still be recorded"
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView 
+          ref={scrollViewRef}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {/* Show center marker */}
-          {location?.centerPoint?.coordinates && (
-            <Marker
-              coordinate={{
-                latitude: location.centerPoint.coordinates[1],
-                longitude: location.centerPoint.coordinates[0],
-              }}
-              title={location.title || "Survey Location"}
-              description={`Status: ${location.status}`}
-              pinColor="#1976D2"
-            />
-          )}
-
-          {/* Show polygon if available */}
-          {location?.geofence?.coordinates?.[0]?.length > 0 && (
-            <Polygon
-              coordinates={location.geofence.coordinates[0].map(([lng, lat]) => ({
-                latitude: lat,
-                longitude: lng,
-              }))}
-              strokeColor="#1976D2"
-              fillColor="rgba(25, 118, 210, 0.2)"
-              strokeWidth={2}
-            />
-          )}
-        </SafeMapView>
-
-        <TouchableOpacity style={styles.fitBtn} onPress={fitMapToPoints}>
-          <Text style={styles.btnText}>Fit All Points</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.label}>Title</Text>
-      <TextInput
-        style={[styles.titleInput, isViewOnly && styles.disabledInput]}
-        placeholder="Enter survey point title"
-        value={title}
-        onChangeText={setTitle}
-        editable={!isViewOnly}
-      />
-
-      <Text style={styles.label}>Survey Location</Text>
-      <Text style={styles.coordinates}>
-        {location ? 
-          `Latitude: ${location.latitude?.toFixed(6)}, Longitude: ${location.longitude?.toFixed(6)}` :
-          'No location selected'
-        }
-      </Text>
-
-      <Text style={styles.label}>Terrain Type</Text>
-      <View style={[styles.pickerContainer, isViewOnly && styles.disabledInput]}>
-        <Picker
-          selectedValue={terrainType}
-          onValueChange={(value) => setTerrainType(value)}
-          style={styles.picker}
-          enabled={!isViewOnly}
-        >
-          {TERRAIN_TYPES.map((type) => (
-            <Picker.Item key={type} label={type} value={type} />
-          ))}
-        </Picker>
-      </View>
-
-      <Text style={styles.label}>Right of Way Authority</Text>
-      <View style={[styles.pickerContainer, isViewOnly && styles.disabledInput]}>
-        <Picker
-          selectedValue={rowAuthority}
-          onValueChange={(value) => setRowAuthority(value)}
-          style={styles.picker}
-          enabled={!isViewOnly}
-        >
-          {ROW_AUTHORITIES.map((authority) => (
-            <Picker.Item key={authority} label={authority} value={authority} />
-          ))}
-        </Picker>
-      </View>
-
-      <Text style={styles.label}>Survey Details</Text>
-      <TextInput
-        style={[styles.input, isViewOnly && styles.disabledInput]}
-        placeholder="Enter terrain, infrastructure info..."
-        multiline
-        value={details}
-        onChangeText={setDetails}
-        editable={!isViewOnly}
-      />
-
-      {/* Only show upload button if not in view-only mode */}
-      {!isViewOnly && (
-        <TouchableOpacity style={styles.uploadBtn} onPress={handleUploadAttachments}>
-          <Text style={styles.btnText}>📷 Upload Attachments</Text>
-        </TouchableOpacity>
-      )}
-
-      <View style={styles.attachmentsContainer}>
-        {mediaFiles.map((file, idx) => (
-          <View key={idx} style={styles.mediaFileContainer}>
-            {file.fileType === 'IMAGE' ? (
-              <View style={styles.imageContainer}>
-                <Image 
-                  source={{ 
-                    uri: file.url,
-                    headers: {
-                      'Cache-Control': 'no-cache',
-                      'Pragma': 'no-cache'
-                    }
+          <View style={styles.mapContainer}>
+            <SafeMapView
+              ref={mapRef}
+              style={styles.map}
+              region={mapRegion}
+              showsUserLocation={true}
+              fallbackText="Map temporarily unavailable"
+              fallbackSubText="Location information will still be recorded"
+            >
+              {/* Show center marker */}
+              {location?.centerPoint?.coordinates && (
+                <Marker
+                  coordinate={{
+                    latitude: location.centerPoint.coordinates[1],
+                    longitude: location.centerPoint.coordinates[0],
                   }}
-                  style={styles.attachment}
-                  defaultSource={require('../assets/image-placeholder.png')}
-                  onError={(error) => {
-                    const errorMessage = error?.nativeEvent?.error || 'Failed to load image';
-                    console.log('Image loading error:', errorMessage);
-                    if (errorMessage.includes('403')) {
-                      // If the image URL has expired, we might want to refresh it
-                      Alert.alert(
-                        'Image Access Error',
-                        'The image link has expired. Please try re-uploading the image.',
-                        [
-                          {
-                            text: 'Remove Image',
-                            onPress: () => setMediaFiles(mediaFiles.filter((_, i) => i !== idx))
-                          },
-                          {
-                            text: 'Cancel',
-                            style: 'cancel'
-                          }
-                        ]
-                      );
-                    }
-                  }}
+                  title={location.title || "Survey Location"}
+                  description={`Status: ${location.status}`}
+                  pinColor="#1976D2"
                 />
-                <View style={styles.imageOverlay}>
-                  <Text style={styles.imageStatus}>
-                    {file.url.startsWith('http') ? '✓ Uploaded' : 'Pending Upload'}
-                  </Text>
-                </View>
-              </View>
-            ) : (
-              <View style={[styles.attachment, styles.fileTypeIndicator]}>
-                <Text style={styles.fileTypeText}>
-                  {file.fileType === 'VIDEO' ? '🎥' : '📄'}
+              )}
+
+              {/* Show polygon if available */}
+              {location?.geofence?.coordinates?.[0]?.length > 0 && (
+                <Polygon
+                  coordinates={location.geofence.coordinates[0].map(([lng, lat]) => ({
+                    latitude: lat,
+                    longitude: lng,
+                  }))}
+                  strokeColor="#1976D2"
+                  fillColor="rgba(25, 118, 210, 0.2)"
+                  strokeWidth={2}
+                />
+              )}
+            </SafeMapView>
+
+            <TouchableOpacity style={styles.fitBtn} onPress={fitMapToPoints}>
+              <Ionicons name="expand" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.formSection}>
+            <Text style={styles.sectionTitle}>Basic Information</Text>
+            
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Title</Text>
+              <TextInput
+                style={[styles.textInput, isViewOnly && styles.disabledInput]}
+                placeholder="Enter survey point title"
+                value={title}
+                onChangeText={setTitle}
+                editable={!isViewOnly}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Survey Location</Text>
+              <View style={styles.locationDisplay}>
+                <Ionicons name="location" size={18} color="#1976D2" style={styles.locationIcon} />
+                <Text style={styles.coordinates}>
+                  {location ? 
+                    `Lat: ${location.latitude?.toFixed(6)}, Long: ${location.longitude?.toFixed(6)}` :
+                    'No location selected'
+                  }
                 </Text>
               </View>
-            )}
-            {/* Only show remove button if not in view-only mode */}
-            {!isViewOnly && (
-              <TouchableOpacity
-                style={styles.removeButton}
-                onPress={() => setMediaFiles(mediaFiles.filter((_, i) => i !== idx))}
-              >
-                <Text style={styles.removeButtonText}>✕</Text>
-              </TouchableOpacity>
-            )}
+            </View>
           </View>
-        ))}
-      </View>
 
-      {/* Only show submit button if not in view-only mode */}
-      {!isViewOnly && (
-        <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
-          <Text style={styles.submitText}>✅ {route.params?.existingSurvey ? 'Update' : 'Submit'} Survey</Text>
-        </TouchableOpacity>
-      )}
-    </ScrollView>
+          <View style={styles.formSection}>
+            <Text style={styles.sectionTitle}>Survey Details</Text>
+            
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Terrain Type</Text>
+              <CustomDropdown
+                options={TERRAIN_TYPES}
+                selectedValue={terrainType}
+                onValueChange={(value) => setTerrainType(value)}
+                placeholder="Select terrain type"
+                disabled={isViewOnly}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Right of Way Authority</Text>
+              <CustomDropdown
+                options={ROW_AUTHORITIES}
+                selectedValue={rowAuthority}
+                onValueChange={(value) => setRowAuthority(value)}
+                placeholder="Select authority"
+                disabled={isViewOnly}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Survey Details</Text>
+              <TextInput
+                style={[styles.textAreaInput, isViewOnly && styles.disabledInput]}
+                placeholder="Enter terrain, infrastructure info..."
+                multiline
+                value={details}
+                onChangeText={setDetails}
+                editable={!isViewOnly}
+              />
+            </View>
+          </View>
+
+          <View style={styles.formSection}>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>Attachments</Text>
+              {!isViewOnly && (
+                <TouchableOpacity 
+                  style={styles.attachmentButton} 
+                  onPress={handleUploadAttachments}
+                >
+                  <Ionicons name="camera" size={18} color="#fff" />
+                  <Text style={styles.attachmentButtonText}>Add Files</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.attachmentsContainer}>
+              {mediaFiles.length === 0 ? (
+                <Text style={styles.noAttachmentsText}>No attachments added</Text>
+              ) : (
+                mediaFiles.map((file, idx) => (
+                  <View key={idx} style={styles.mediaFileContainer}>
+                    {file.fileType === 'IMAGE' ? (
+                      <View style={styles.imageContainer}>
+                        <Image 
+                          source={{ 
+                            uri: file.url,
+                            headers: {
+                              'Cache-Control': 'no-cache',
+                              'Pragma': 'no-cache'
+                            }
+                          }}
+                          style={styles.attachment}
+                          defaultSource={require('../assets/image-placeholder.png')}
+                          onError={(error) => {
+                            const errorMessage = error?.nativeEvent?.error || 'Failed to load image';
+                            console.log('Image loading error:', errorMessage);
+                            if (errorMessage.includes('403')) {
+                              Alert.alert(
+                                'Image Access Error',
+                                'The image link has expired. Please try re-uploading the image.',
+                                [
+                                  {
+                                    text: 'Remove Image',
+                                    onPress: () => setMediaFiles(mediaFiles.filter((_, i) => i !== idx))
+                                  },
+                                  {
+                                    text: 'Cancel',
+                                    style: 'cancel'
+                                  }
+                                ]
+                              );
+                            }
+                          }}
+                        />
+                        <View style={styles.imageOverlay}>
+                          <Text style={styles.imageStatus}>
+                            {file.url.startsWith('http') ? '✓ Uploaded' : 'Pending Upload'}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={[styles.attachment, styles.fileTypeIndicator]}>
+                        <Text style={styles.fileTypeText}>
+                          {file.fileType === 'VIDEO' ? '🎥' : '📄'}
+                        </Text>
+                      </View>
+                    )}
+                    {/* Only show remove button if not in view-only mode */}
+                    {!isViewOnly && (
+                      <TouchableOpacity
+                        style={styles.removeButton}
+                        onPress={() => setMediaFiles(mediaFiles.filter((_, i) => i !== idx))}
+                      >
+                        <Text style={styles.removeButtonText}>✕</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))
+              )}
+            </View>
+          </View>
+          
+          {/* Add padding at the bottom to ensure content is visible above the fixed footer */}
+          <View style={styles.footerSpace} />
+        </ScrollView>
+
+        {/* Fixed footer with submit button */}
+        {!isViewOnly && (
+          <SafeAreaView style={styles.footer}>
+            <TouchableOpacity 
+              style={styles.submitBtn} 
+              onPress={handleSubmit}
+            >
+              <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              <Text style={styles.submitText}>
+                {route.params?.existingSurvey ? 'Update' : 'Submit'} Survey
+              </Text>
+            </TouchableOpacity>
+          </SafeAreaView>
+        )}
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
+const { width } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  formSection: {
     backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    color: '#2c3e50',
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  formGroup: {
+    marginBottom: 16,
   },
   mapContainer: {
-    height: 300,
+    height: 250,
     marginBottom: 16,
     borderRadius: 12,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   map: {
     flex: 1,
   },
   label: { 
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '500',
     marginBottom: 8,
+    color: '#555',
   },
-  titleInput: {
-    borderColor: '#ccc',
+  textInput: {
+    borderColor: '#ddd',
     borderWidth: 1,
     borderRadius: 8,
     padding: 12,
-    marginBottom: 16,
+    fontSize: 15,
+    backgroundColor: '#fff',
   },
-  coordinates: {
-    padding: 10,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 6,
-    marginBottom: 16,
-  },
-  input: {
-    borderColor: '#ccc',
+  textAreaInput: {
+    borderColor: '#ddd',
     borderWidth: 1,
     borderRadius: 8,
     padding: 12,
+    fontSize: 15,
     minHeight: 100,
     textAlignVertical: 'top',
-    marginBottom: 12,
+    backgroundColor: '#fff',
   },
-  pickerContainer: {
-    borderColor: '#ccc',
+  locationDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#f0f7ff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d0e1fa',
+  },
+  locationIcon: {
+    marginRight: 8,
+  },
+  coordinates: {
+    fontSize: 14,
+    color: '#4a4a4a',
+  },
+  // Dropdown styles
+  dropdownContainer: {
+    borderColor: '#ddd',
     borderWidth: 1,
     borderRadius: 8,
-    marginBottom: 16,
+    backgroundColor: '#fff',
   },
-  picker: {
-    height: 50,
-  },
-  uploadBtn: {
-    backgroundColor: '#1976D2',
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
   },
-  btnText: { 
-    color: '#fff',
-    textAlign: 'center',
+  dropdownButtonText: {
+    fontSize: 15,
+    color: '#333',
+  },
+  dropdownOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  dropdownModal: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 5,
+    width: '90%',
+    maxHeight: 300,
+  },
+  dropdownItem: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  dropdownItemText: {
+    fontSize: 16,
+  },
+  dropdownItemSelected: {
+    color: '#1976D2',
     fontWeight: 'bold',
+  },
+  // Attachment styles
+  attachmentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1976D2',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  attachmentButtonText: {
+    color: '#fff',
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  noAttachmentsText: {
+    textAlign: 'center',
+    color: '#999',
+    padding: 20,
   },
   attachmentsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 20,
   },
   mediaFileContainer: {
     position: 'relative',
-    marginRight: 10,
-    marginBottom: 10,
+    marginRight: 12,
+    marginBottom: 12,
   },
   imageContainer: {
     position: 'relative',
-    width: 90,
-    height: 90,
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   imageOverlay: {
     position: 'absolute',
@@ -1049,35 +1273,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   attachment: {
-    width: 90,
-    height: 90,
-    marginRight: 10,
-    marginBottom: 10,
-    borderRadius: 6,
-    backgroundColor: '#f0f0f0',
-  },
-  submitBtn: {
-    backgroundColor: '#388E3C',
-    padding: 14,
+    width: 100,
+    height: 100,
     borderRadius: 8,
-  },
-  submitText: { 
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: 'bold',
-  },
-  fitBtn: {
-    position: 'absolute',
-    bottom: 16,
-    right: 16,
-    backgroundColor: '#1976D2',
-    padding: 8,
-    borderRadius: 4,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    backgroundColor: '#f0f0f0',
   },
   fileTypeIndicator: {
     backgroundColor: '#f0f0f0',
@@ -1092,9 +1291,9 @@ const styles = StyleSheet.create({
     top: -8,
     right: -8,
     backgroundColor: 'rgba(255, 0, 0, 0.8)',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1103,19 +1302,68 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
+  // Footer styles
+  footerSpace: {
+    height: 80, // Space for the footer
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 10,
+  },
+  submitBtn: {
+    backgroundColor: '#388E3C',
+    padding: 14,
+    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  submitText: { 
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  fitBtn: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    backgroundColor: '#1976D2',
+    padding: 8,
+    borderRadius: 6,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  // View-only mode and loading overlay styles
   viewOnlyBanner: {
     padding: 10,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 6,
-    marginBottom: 16,
+    backgroundColor: '#ffebee',
+    borderLeftWidth: 4,
+    borderLeftColor: '#ef5350',
   },
   viewOnlyText: {
     fontSize: 14,
     fontWeight: 'bold',
+    color: '#c62828',
     textAlign: 'center',
   },
   disabledInput: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#f5f5f5',
+    color: '#757575',
   },
   loadingOverlay: {
     position: 'absolute',
@@ -1125,15 +1373,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     zIndex: 1000,
     elevation: 5,
-    height: '100%',
-    width: '100%',
   },
   loadingText: {
     fontSize: 16,
     fontWeight: 'bold',
     marginTop: 10,
+    color: '#1976D2',
   },
 });
