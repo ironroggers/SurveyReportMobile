@@ -73,6 +73,17 @@ export default function LocationDetailsScreen() {
   const fetchLocationData = useCallback(async () => {
     console.log("LocationDetailsScreen: fetching data for ID:", locationId);
 
+    // Request location permissions regardless of locationId
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log("Location permission denied");
+        Alert.alert("Permission Denied", "Location permission is required to show your current position on the map.");
+      }
+    } catch (error) {
+      console.error("Error requesting location permission:", error);
+    }
+
     if (!locationId) {
       console.log("LocationDetailsScreen: No locationId provided");
       // Default to user's current location if no ID provided
@@ -1216,6 +1227,7 @@ export default function LocationDetailsScreen() {
                 onPress={handleMapPress}
                 provider="google"
                 showsUserLocation={true}
+                followsUserLocation={true}
                 showsMyLocationButton={true}
                 showsCompass={true}
                 showsScale={true}
