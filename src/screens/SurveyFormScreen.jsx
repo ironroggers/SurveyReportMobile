@@ -8,6 +8,7 @@ import { Picker } from '@react-native-picker/picker';
 import {SURVEY_URL} from "../api-url";
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import AttachmentViewer from '../components/AttachmentViewer';
 
@@ -97,6 +98,7 @@ export default function SurveyFormScreen() {
   const [title, setTitle] = useState('');
   const [terrainType, setTerrainType] = useState('URBAN');
   const [rowAuthority, setRowAuthority] = useState('NHAI');
+  const [locationPermission, setLocationPermission] = useState(false);
   const navigation = useNavigation();
   const route = useRoute();
   const assignedLocation = route.params?.locationData;
@@ -152,13 +154,47 @@ export default function SurveyFormScreen() {
       
       // Load media files from the existing survey
       if (existingSurvey.mediaFiles && existingSurvey.mediaFiles.length > 0) {
-        const formattedMediaFiles = existingSurvey.mediaFiles.map(file => ({
-          url: file.url,
-          fileType: file.fileType || getFileType(getMimeType(file.url)),
-          description: file.description || '',
-          uploaded_at: file.uploaded_at || new Date()
-        }));
+        const formattedMediaFiles = existingSurvey.mediaFiles.map(file => {
+          // Extract geo-location data if available in the file
+          let geoLocation = null;
+          
+          // Check if file has geo-location data directly
+          if (file.geoLocation) {
+            console.log("Using existing file geo-location data");
+            geoLocation = file.geoLocation;
+          } 
+          // Check if file has metadata with geo-location
+          else if (file.metadata && file.metadata.geoLocation) {
+            console.log("Using file metadata geo-location");
+            geoLocation = file.metadata.geoLocation;
+          } 
+          // No geo-location in the file, use survey coordinates as fallback
+          else if (existingSurvey.latlong && existingSurvey.latlong.length >= 2) {
+            console.log("Using survey coordinates for file geo-location");
+            geoLocation = {
+              latitude: existingSurvey.latlong[0],
+              longitude: existingSurvey.latlong[1],
+              timestamp: file.uploaded_at || new Date().getTime()
+            };
+          }
+          
+          // Log geo-location status
+          if (geoLocation) {
+            console.log(`File ${file.url} has geo-location:`, geoLocation);
+          } else {
+            console.log(`File ${file.url} has no geo-location data`);
+          }
+          
+          return {
+            url: file.url,
+            fileType: file.fileType || getFileType(getMimeType(file.url)) || 'DOCUMENT',
+            description: file.description || '',
+            uploaded_at: file.uploaded_at || new Date(),
+            geoLocation: geoLocation
+          };
+        });
         
+        console.log(`Loaded ${formattedMediaFiles.length} media files from server`);
         setMediaFiles(formattedMediaFiles);
       }
     }
@@ -171,6 +207,109 @@ export default function SurveyFormScreen() {
     }
   }, [currentLocation, existingSurvey]);
 
+  // Request location permission on component mount
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(status === 'granted');
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location Permission Required',
+          'Location permission is needed to geo-tag attachments. Some features may be limited without this permission.',
+          [{ text: 'OK' }]
+        );
+      }
+    })();
+  }, []);
+
+  // Get current location
+  const getCurrentLocation = async () => {
+    if (!locationPermission) {
+      // Try requesting permission again
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      console.log("Location permission status:", status);
+      if (status !== 'granted') {
+        console.log("Location permission not granted");
+        Alert.alert(
+          'Location Permission Required',
+          'Please enable location permission in your device settings to geo-tag images.',
+          [{ text: 'OK' }]
+        );
+        return null;
+      }
+      setLocationPermission(true);
+    }
+    
+    try {
+      console.log("Getting precise current location...");
+      
+      // First ensure location services are enabled with high accuracy
+      const providerStatus = await Location.getProviderStatusAsync();
+      if (!providerStatus.locationServicesEnabled) {
+        console.log("Location services are disabled");
+        Alert.alert(
+          'Location Services Disabled',
+          'Please enable location services in your device settings for accurate geo-tagging.',
+          [{ text: 'OK' }]
+        );
+        return null;
+      }
+      
+      // Request a high accuracy location with shorter timeout and maximum age
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Highest,
+        maximumAge: 10000, // Only use cached locations less than 10 seconds old
+        timeout: 15000, // Time out after 15 seconds
+      });
+      
+      console.log("Precise location obtained:", {
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+        accuracy: currentLocation.coords.accuracy,
+        timestamp: new Date(currentLocation.timestamp).toISOString()
+      });
+      
+      return {
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+        altitude: currentLocation.coords.altitude,
+        accuracy: currentLocation.coords.accuracy,
+        timestamp: currentLocation.timestamp
+      };
+    } catch (error) {
+      console.log('Error getting current location:', error);
+      Alert.alert(
+        'Location Error',
+        'Could not get your current location. Please check if location services are enabled and try again.',
+        [{ text: 'OK' }]
+      );
+      return null;
+    }
+  };
+
+  // Add a function to check if device location services are enabled
+  const checkLocationServices = async () => {
+    try {
+      const providerStatus = await Location.getProviderStatusAsync();
+      console.log("Location provider status:", providerStatus);
+      
+      if (!providerStatus.locationServicesEnabled) {
+        Alert.alert(
+          'Location Services Disabled',
+          'Please enable location services in your device settings to geo-tag images.',
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.log("Error checking location services:", error);
+      return false;
+    }
+  };
+
+  // Modify handleUploadAttachments to check location services
   const handleUploadAttachments = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -178,17 +317,81 @@ export default function SurveyFormScreen() {
       return;
     }
 
+    // Check if location services are enabled
+    const locationServicesEnabled = await checkLocationServices();
+    if (!locationServicesEnabled) {
+      Alert.alert(
+        'Location Warning',
+        'Location services are disabled. Your images will not be geo-tagged with your current location.',
+        [
+          { 
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Continue Anyway',
+            onPress: async () => {
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.All,
+                allowsMultipleSelection: true,
+                quality: 0.5,
+                allowsEditing: false,
+                exif: true,
+              });
+              processSelectedMedia(result, null);
+            }
+          }
+        ]
+      );
+      return;
+    }
+
+    // Get precise current location BEFORE opening the image picker
+    // This ensures we capture where the user actually is when selecting the images
+    const preciseLoc = await getCurrentLocation();
+    
+    if (!preciseLoc) {
+      Alert.alert(
+        'Precise Location Unavailable',
+        'Unable to get your current precise location. Continue without exact geo-tagging?',
+        [
+          { 
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Continue Anyway',
+            onPress: async () => {
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.All,
+                allowsMultipleSelection: true,
+                quality: 0.5,
+                allowsEditing: false,
+                exif: true,
+              });
+              processSelectedMedia(result, null);
+            }
+          }
+        ]
+      );
+      return;
+    }
+
+    console.log("Opening gallery with precise location data ready:", preciseLoc);
+    
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsMultipleSelection: true,
-      quality: 0.5, // Reduced quality for better upload performance
+      quality: 0.5,
       allowsEditing: false,
-      exif: false, // Don't need EXIF data
+      exif: true,
     });
 
-    processSelectedMedia(result);
+    // Pass the precise location captured at the moment of selecting the images
+    processSelectedMedia(result, preciseLoc);
   };
 
+  // Similarly, update handleTakePicture
   const handleTakePicture = async () => {
     const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
     if (!cameraPermission.granted) {
@@ -196,20 +399,89 @@ export default function SurveyFormScreen() {
       return;
     }
 
+    // Check if location services are enabled first
+    const locationServicesEnabled = await checkLocationServices();
+    if (!locationServicesEnabled) {
+      Alert.alert(
+        'Location Warning',
+        'Location services are disabled. Your images will not be geo-tagged with the exact location where they were taken.',
+        [
+          { 
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Continue Anyway',
+            onPress: async () => {
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: false,
+                quality: 0.5,
+                exif: true,
+              });
+              processSelectedMedia(result, null);
+            }
+          }
+        ]
+      );
+      return;
+    }
+
+    // Get current precise location first BEFORE opening the camera
+    // This ensures we have the exact location at the moment the photo will be taken
+    const preciseLoc = await getCurrentLocation();
+    
+    if (!preciseLoc) {
+      Alert.alert(
+        'Precise Location Unavailable',
+        'Unable to get your current precise location. Continue without exact geo-tagging?',
+        [
+          { 
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Continue Anyway',
+            onPress: async () => {
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: false,
+                quality: 0.5,
+                exif: true,
+              });
+              processSelectedMedia(result, null);
+            }
+          }
+        ]
+      );
+      return;
+    }
+
+    console.log("Opening camera with precise location data ready:", preciseLoc);
+    
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
       quality: 0.5,
-      exif: false,
+      exif: true,
     });
 
-    processSelectedMedia(result);
+    // Pass the precise location captured at the moment before taking the photo
+    processSelectedMedia(result, preciseLoc);
   };
 
-  const processSelectedMedia = (result) => {
+  const processSelectedMedia = (result, preciseLocation) => {
     if (!result.canceled) {
       // Show file size warning for large files
       const largeFiles = result.assets.filter(asset => asset.fileSize && asset.fileSize > 5000000); // 5MB
+      
+      // Log EXIF and location data for debugging
+      console.log("Result assets:", result.assets.length);
+      if (result.assets.length > 0) {
+        console.log("First asset EXIF data:", result.assets[0].exif);
+        console.log("Precise current location:", preciseLocation);
+      }
+      
       if (largeFiles.length > 0) {
         Alert.alert(
           'Large File Warning',
@@ -222,27 +494,99 @@ export default function SurveyFormScreen() {
             {
               text: 'Continue',
               onPress: () => {
-                const newMediaFiles = result.assets.map(asset => ({
-                  url: asset.uri,
-                  fileType: getFileType(asset.type || getMimeType(asset.uri)),
-                  description: '',
-                  fileSize: asset.fileSize,
-                  uploaded_at: new Date()
-                }));
-                setMediaFiles([...mediaFiles, ...newMediaFiles]);
+                const newMediaFiles = result.assets.map(asset => {
+                  // Try to get location from EXIF data first (if available)
+                  let mediaLocation = null;
+                  
+                  if (asset.exif && (asset.exif.GPSLatitude || asset.exif.GPSLongitude)) {
+                    console.log("Using photo's embedded EXIF location data");
+                    mediaLocation = {
+                      latitude: asset.exif.GPSLatitude,
+                      longitude: asset.exif.GPSLongitude,
+                      altitude: asset.exif.GPSAltitude,
+                      timestamp: new Date().getTime()
+                    };
+                  } 
+                  // Next, use the precise current location captured at the moment of taking/selecting the photo
+                  else if (preciseLocation) {
+                    console.log("Using precise current device location at capture moment");
+                    mediaLocation = preciseLocation;
+                  }
+                  // Only use survey location if specifically requested (e.g., for backfilling historical data)
+                  // Normally we won't reach this case since we're getting precise location first
+                  else {
+                    console.log("No location data available for this media file");
+                  }
+                  
+                  // Log the final mediaLocation
+                  console.log("Final mediaLocation:", mediaLocation);
+                  
+                  return {
+                    url: asset.uri,
+                    fileType: getFileType(asset.type || getMimeType(asset.uri)),
+                    description: '',
+                    fileSize: asset.fileSize,
+                    uploaded_at: new Date(),
+                    geoLocation: mediaLocation
+                  };
+                });
+                
+                // Log the new media files
+                console.log(`Adding ${newMediaFiles.length} new media files with location data`);
+                setMediaFiles(prevFiles => {
+                  const updatedFiles = [...prevFiles, ...newMediaFiles];
+                  console.log(`Total media files: ${updatedFiles.length}`);
+                  return updatedFiles;
+                });
               }
             }
           ]
         );
       } else {
-        const newMediaFiles = result.assets.map(asset => ({
-          url: asset.uri,
-          fileType: getFileType(asset.type || getMimeType(asset.uri)),
-          description: '',
-          fileSize: asset.fileSize,
-          uploaded_at: new Date()
-        }));
-        setMediaFiles([...mediaFiles, ...newMediaFiles]);
+        const newMediaFiles = result.assets.map(asset => {
+          // Try to get location from EXIF data first (if available)
+          let mediaLocation = null;
+          
+          if (asset.exif && (asset.exif.GPSLatitude || asset.exif.GPSLongitude)) {
+            console.log("Using photo's embedded EXIF location data");
+            mediaLocation = {
+              latitude: asset.exif.GPSLatitude,
+              longitude: asset.exif.GPSLongitude,
+              altitude: asset.exif.GPSAltitude,
+              timestamp: new Date().getTime()
+            };
+          } 
+          // Next, use the precise current location captured at the moment of taking/selecting the photo
+          else if (preciseLocation) {
+            console.log("Using precise current device location at capture moment");
+            mediaLocation = preciseLocation;
+          }
+          // Only use survey location if specifically requested (e.g., for backfilling historical data)
+          // Normally we won't reach this case since we're getting precise location first
+          else {
+            console.log("No location data available for this media file");
+          }
+          
+          // Log the final mediaLocation
+          console.log("Final mediaLocation:", mediaLocation);
+          
+          return {
+            url: asset.uri,
+            fileType: getFileType(asset.type || getMimeType(asset.uri)),
+            description: '',
+            fileSize: asset.fileSize,
+            uploaded_at: new Date(),
+            geoLocation: mediaLocation
+          };
+        });
+        
+        // Log the new media files
+        console.log(`Adding ${newMediaFiles.length} new media files with location data`);
+        setMediaFiles(prevFiles => {
+          const updatedFiles = [...prevFiles, ...newMediaFiles];
+          console.log(`Total media files: ${updatedFiles.length}`);
+          return updatedFiles;
+        });
       }
     }
   };
@@ -308,6 +652,10 @@ export default function SurveyFormScreen() {
       const fileType = getFileType(mimeType);
       console.log('Uploading file:', { fileName, fileType, mimeType, size: fileInfo.size });
       
+      // Get the geo location data for this file
+      const fileData = mediaFiles.find(file => file.url === fileUri);
+      const geoLocation = fileData?.geoLocation || null;
+      
       // For images, try to compress them before uploading
       let finalUri = fileUri;
       if (fileType === 'IMAGE' && fileInfo.size > 1000000) { // 1MB
@@ -336,6 +684,19 @@ export default function SurveyFormScreen() {
         type: mimeType,
         name: fileName,
       });
+      
+      // Add geo-location data if available
+      if (geoLocation) {
+        formData.append('metadata', JSON.stringify({
+          geoLocation: {
+            latitude: geoLocation.latitude,
+            longitude: geoLocation.longitude,
+            altitude: geoLocation.altitude,
+            accuracy: geoLocation.accuracy,
+            timestamp: geoLocation.timestamp
+          }
+        }));
+      }
 
       console.log('Sending request to:', `${SURVEY_URL}/api/upload`);
       
@@ -381,7 +742,8 @@ export default function SurveyFormScreen() {
           url: data.data.url,
           fileType: data.data.fileType || fileType || 'DOCUMENT',
           description: '',
-          uploaded_at: new Date()
+          uploaded_at: new Date(),
+          geoLocation: geoLocation // Preserve the geolocation in the uploaded file metadata
         };
       } catch (error) {
         if (error.name === 'AbortError') {
@@ -394,12 +756,27 @@ export default function SurveyFormScreen() {
           try {
             // If available, try using FileSystem.uploadAsync as a fallback
             if (FileSystem.uploadAsync) {
+              // Add geo-location as parameters if available
+              const parameters = { fileName };
+              
+              if (geoLocation) {
+                parameters.metadata = JSON.stringify({
+                  geoLocation: {
+                    latitude: geoLocation.latitude,
+                    longitude: geoLocation.longitude,
+                    altitude: geoLocation.altitude,
+                    accuracy: geoLocation.accuracy,
+                    timestamp: geoLocation.timestamp
+                  }
+                });
+              }
+              
               const uploadResponse = await FileSystem.uploadAsync(`${SURVEY_URL}/api/upload`, finalUri, {
                 httpMethod: 'POST',
                 uploadType: FileSystem.FileSystemUploadType.MULTIPART,
                 fieldName: 'file',
                 mimeType: mimeType,
-                parameters: { fileName: fileName }
+                parameters
               });
               
               console.log('Fallback upload response:', uploadResponse);
@@ -413,7 +790,8 @@ export default function SurveyFormScreen() {
                       url: responseData.data.url,
                       fileType: responseData.data.fileType || fileType || 'DOCUMENT',
                       description: '',
-                      uploaded_at: new Date()
+                      uploaded_at: new Date(),
+                      geoLocation: geoLocation // Preserve the geolocation in the uploaded file metadata
                     };
                   }
                 } catch (e) {
@@ -494,6 +872,8 @@ export default function SurveyFormScreen() {
           uploadedMediaFiles.push({
             ...file,
             fileType: file.fileType || getFileType(getMimeType(file.url)) || 'DOCUMENT',
+            // Preserve geo-location if it exists
+            geoLocation: file.geoLocation || null
           });
         });
   
@@ -518,6 +898,8 @@ export default function SurveyFormScreen() {
                   ...uploadResult,
                   description: file.description || '',
                   fileType: uploadResult.fileType || file.fileType || 'DOCUMENT',
+                  // Make sure we preserve the geo-location in the uploaded file
+                  geoLocation: uploadResult.geoLocation || file.geoLocation || null
                 });
                 console.log(`Successfully uploaded file: ${file.url.split('/').pop()}`);
               } else {
@@ -565,6 +947,8 @@ export default function SurveyFormScreen() {
                         ...retryResult,
                         description: file.description || '',
                         fileType: retryResult.fileType || file.fileType || 'DOCUMENT',
+                        // Make sure we preserve the geo-location in the uploaded file
+                        geoLocation: retryResult.geoLocation || file.geoLocation || null
                       });
                       uploadErrors--; // Decrease error count on success
                       console.log(`Successfully uploaded file on retry: ${file.url.split('/').pop()}`);
@@ -973,9 +1357,19 @@ export default function SurveyFormScreen() {
                           }}
                         />
                         <View style={styles.imageOverlay}>
-                          <Text style={styles.imageStatus}>
-                            {file.url.startsWith('http') ? '✓ Uploaded' : 'Pending Upload'}
-                          </Text>
+                          <View style={styles.imageStatusContainer}>
+                            <Text style={styles.imageStatus}>
+                              {file.url.startsWith('http') ? '✓ Uploaded' : 'Pending Upload'}
+                            </Text>
+                            {file.geoLocation ? (
+                              <View style={styles.geoTagIndicator}>
+                                <Ionicons name="location" size={12} color="#fff" />
+                                <Text style={styles.geoTagText}>Geo-tagged</Text>
+                              </View>
+                            ) : (
+                              <Text style={styles.noGeoTagText}>No Location</Text>
+                            )}
+                          </View>
                         </View>
                       </TouchableOpacity>
                     ) : (
@@ -983,6 +1377,11 @@ export default function SurveyFormScreen() {
                         <Text style={styles.fileTypeText}>
                           {file.fileType === 'VIDEO' ? '🎥' : '📄'}
                         </Text>
+                        {file.geoLocation && (
+                          <View style={styles.fileGeoTagIndicator}>
+                            <Ionicons name="location" size={12} color="#1976D2" />
+                          </View>
+                        )}
                       </View>
                     )}
                     {/* Only show remove button if not in view-only mode */}
@@ -1173,7 +1572,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cameraButton: {
-    backgroundColor: '#388E3C',
+    backgroundColor: '#1976D2',
   },
   attachmentButtonText: {
     color: '#fff',
@@ -1189,6 +1588,7 @@ const styles = StyleSheet.create({
   attachmentsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    marginBottom: 10,
   },
   mediaFileContainer: {
     position: 'relative',
@@ -1209,6 +1609,12 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     padding: 4,
+  },
+  imageStatusContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
   },
   imageStatus: {
     color: '#fff',
@@ -1247,7 +1653,7 @@ const styles = StyleSheet.create({
   },
   // Footer styles
   footerSpace: {
-    height: 80, // Space for the footer
+    height: 100,
   },
   footer: {
     position: 'absolute',
@@ -1265,7 +1671,7 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   submitBtn: {
-    backgroundColor: '#388E3C',
+    backgroundColor: '#1976D2',
     padding: 14,
     borderRadius: 8,
     flexDirection: 'row',
@@ -1312,5 +1718,43 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 10,
     color: '#1976D2',
+  },
+  imageStatusContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
+  geoTagIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(25, 118, 210, 0.7)',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  geoTagText: {
+    color: '#fff',
+    fontSize: 8,
+    marginLeft: 2,
+  },
+  fileGeoTagIndicator: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noGeoTagText: {
+    color: '#fff',
+    fontSize: 8,
+    backgroundColor: 'rgba(150, 150, 150, 0.7)',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
 });

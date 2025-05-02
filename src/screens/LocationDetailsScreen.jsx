@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert, SafeAreaView, ActivityIndicator, Platform, FlatList, RefreshControl, StatusBar, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert, SafeAreaView, ActivityIndicator, Platform, FlatList, RefreshControl, StatusBar, Modal, PanResponder, Animated } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { useCurrentUser } from "../hooks/useCurrentUser";
@@ -68,6 +68,60 @@ export default function LocationDetailsScreen() {
   
   // Track whether the submit button is visible for debugging
   const [buttonVisible, setButtonVisible] = useState(true);
+  
+  // New state for resizable containers with animated values
+  const [mapHeight, setMapHeight] = useState(height * 0.4); // Default map height - 40% of screen
+  const animatedMapHeight = useRef(new Animated.Value(height * 0.4)).current;
+  const [dragging, setDragging] = useState(false);
+  const animatedHandleOpacity = useRef(new Animated.Value(1)).current;
+  
+  // Create panResponder for resizing with improved handling
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        setDragging(true);
+        // Store the current height value to avoid jumps
+        animatedMapHeight.__lastValue = mapHeight;
+        // Animate the handle to be more visible during drag
+        Animated.timing(animatedHandleOpacity, {
+          toValue: 0.7,
+          duration: 200,
+          useNativeDriver: true
+        }).start();
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        // Calculate new height within bounds
+        const newHeight = Math.max(
+          height * 0.2, // Minimum map height (20% of screen)
+          Math.min(height * 0.75, animatedMapHeight.__lastValue + gestureState.dy) // Maximum map height (75% of screen)
+        );
+        
+        // Directly set the animated value without updating state during drag
+        animatedMapHeight.setValue(newHeight);
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        setDragging(false);
+        // Get the final height from the animated value
+        const finalHeight = animatedMapHeight._value || animatedMapHeight.__getValue();
+        
+        // Update the state once at the end of the drag
+        setMapHeight(finalHeight);
+        
+        // Animate the handle back to normal
+        Animated.timing(animatedHandleOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true
+        }).start();
+        
+        // Fit map to coordinates after resize with a small delay
+        if (mapRef.current && routeCoordinates.length > 0) {
+          setTimeout(() => fitAllPoints(), 100);
+        }
+      }
+    })
+  ).current;
   
   // Fetch location data
   const fetchLocationData = useCallback(async () => {
@@ -1220,7 +1274,7 @@ export default function LocationDetailsScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.mapContainer}>
+        <Animated.View style={[styles.mapContainer, { height: animatedMapHeight }]}>
           {mapError && (
             <View style={styles.errorContainer}>
               <Text style={styles.errorText}>Error: {mapError}</Text>
@@ -1337,7 +1391,22 @@ export default function LocationDetailsScreen() {
               <Text style={styles.errorText}>Unable to load map. Please check your connection.</Text>
             </View>
           )}
-        </View>
+        </Animated.View>
+        
+        {/* Resizable handle with animation */}
+        <Animated.View 
+          style={[
+            styles.resizeHandle, 
+            { 
+              opacity: animatedHandleOpacity,
+              backgroundColor: dragging ? '#e0e0e0' : '#f8f8f8'
+            }
+          ]} 
+          {...panResponder.panHandlers}
+        >
+          <View style={styles.handleBar} />
+          {dragging && <Text style={styles.dragHintText}>Drag to resize</Text>}
+        </Animated.View>
         
         <View style={styles.surveyListContainer}>
           <View style={styles.surveyListHeader}>
@@ -1631,11 +1700,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
   },
   mapContainer: {
-    height: height * 0.4, // Map takes 40% of the screen
     width: '100%',
     backgroundColor: '#f0f0f0',
     borderWidth: 1,
     borderColor: '#ccc',
+    // height is now dynamic and controlled by state
   },
   mapWrapper: {
     flex: 1,
@@ -1649,7 +1718,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 20,
     right: 20,
-    backgroundColor: 'rgba(33, 150, 243, 0.8)',
+    backgroundColor: 'rgba(33, 150, 243, 0.9)',
     paddingVertical: 10,
     paddingHorizontal: 15,
     borderRadius: 8,
@@ -1686,7 +1755,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   surveyListContainer: {
-    flex: 1,
+    flex: 1, // Takes remaining space
     backgroundColor: '#fff',
   },
   surveyListHeader: {
@@ -1697,6 +1766,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    backgroundColor: '#f9f9f9',
   },
   surveyListTitle: {
     fontSize: 16,
@@ -1705,7 +1775,7 @@ const styles = StyleSheet.create({
   },
   surveyListContent: {
     paddingHorizontal: 16, 
-    paddingBottom: 16,
+    paddingBottom: 120, // Increased padding to ensure last survey is visible above the button
   },
   emptyContainer: {
     flex: 1,
@@ -1723,6 +1793,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f9f9f9',
     marginTop: 12,
+    marginBottom: 8, // Added margin at the bottom for spacing between items
     padding: 16,
     borderRadius: 8,
     borderLeftWidth: 4,
@@ -1769,14 +1840,15 @@ const styles = StyleSheet.create({
   },
   headerPinButton: {
     backgroundColor: '#2196F3',
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 6,
     marginLeft: 8,
+    elevation: 2,
   },
   headerPinButtonText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   locationInfo: {
@@ -1784,17 +1856,18 @@ const styles = StyleSheet.create({
     top: 10,
     left: 10,
     right: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    paddingVertical: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingVertical: 8,
     paddingHorizontal: 10,
-    borderRadius: 5,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#ccc',
+    elevation: 3,
   },
   locationTitle: {
     fontWeight: 'bold',
     textAlign: 'center',
-    fontSize: 14,
+    fontSize: 15,
     color: '#333',
   },
   routeStatsContainer: {
@@ -1814,10 +1887,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#4CAF50',
-    padding: 15,
-    borderTopWidth: 2,
-    borderTopColor: '#2E7D32',
+    backgroundColor: '#fff',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
@@ -1832,78 +1905,73 @@ const styles = StyleSheet.create({
   },
   approveButton: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#2196F3',
     paddingVertical: 15,
     paddingHorizontal: 20,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#2E7D32',
+    elevation: 2,
   },
   approveButtonText: {
-    color: '#2E7D32',
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
   rejectButton: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#FF5252',
     paddingVertical: 15,
     paddingHorizontal: 20,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#C62828',
+    elevation: 2,
   },
   rejectButtonText: {
-    color: '#C62828',
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
   submitButton: {
-    backgroundColor: '#fff',
+    backgroundColor: '#2196F3',
     paddingVertical: 15,
     paddingHorizontal: 20,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#2E7D32',
+    elevation: 2,
   },
   submitButtonText: {
-    color: '#2E7D32',
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
   restartButton: {
-    backgroundColor: '#fff',
+    backgroundColor: '#2196F3',
     paddingVertical: 15,
     paddingHorizontal: 20,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#1565C0',
+    elevation: 2,
   },
   restartButtonText: {
-    color: '#1565C0',
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
   startButton: {
-    backgroundColor: '#fff',
+    backgroundColor: '#2196F3',
     paddingVertical: 15,
     paddingHorizontal: 20,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#00796B',
+    elevation: 2,
   },
   startButtonText: {
-    color: '#00796B',
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -1992,11 +2060,12 @@ const styles = StyleSheet.create({
   },
   assignButton: {
     flex: 1,
-    backgroundColor: '#1976D2',
+    backgroundColor: '#2196F3',
     padding: 15,
     borderRadius: 8,
     marginLeft: 10,
     alignItems: 'center',
+    elevation: 2,
   },
   assignButtonText: {
     color: '#fff',
@@ -2004,18 +2073,39 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   assignLocationButton: {
-    backgroundColor: '#fff',
+    backgroundColor: '#2196F3',
     paddingVertical: 15,
     paddingHorizontal: 20,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#1976D2',
+    elevation: 2,
   },
   assignLocationButtonText: {
-    color: '#1976D2',
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  // Updated styles for resize handle
+  resizeHandle: {
+    width: '100%',
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f8f8',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
+    zIndex: 10,
+  },
+  handleBar: {
+    width: 50,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#aaa',
+  },
+  dragHintText: {
+    fontSize: 10,
+    color: '#999',
+    marginTop: 3,
   },
 });
