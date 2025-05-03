@@ -12,6 +12,10 @@ import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import AttachmentViewer from '../components/AttachmentViewer';
 
+// Constants for recording limits
+const MAX_VIDEO_DURATION = 20000; // 20 seconds in milliseconds
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB size limit
+
 // Custom Dropdown Component
 const CustomDropdown = ({ options, selectedValue, onValueChange, placeholder, disabled }) => {
   const [visible, setVisible] = useState(false);
@@ -110,7 +114,9 @@ export default function SurveyFormScreen() {
   const scrollViewRef = useRef(null);
   const [isAttachmentViewerVisible, setIsAttachmentViewerVisible] = useState(false);
   const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState(0);
-  
+  const [uploadQueue, setUploadQueue] = useState([]);
+  const [isBackgroundUploading, setIsBackgroundUploading] = useState(false);
+
   console.log("currentLocation", currentLocation, assignedLocation);
   console.log("existingSurvey", existingSurvey);
   console.log("isViewOnly mode:", isViewOnly);
@@ -307,6 +313,174 @@ export default function SurveyFormScreen() {
       console.log("Error checking location services:", error);
       return false;
     }
+  };
+
+  // Add a function to handle video recording
+  const handleRecordVideo = async () => {
+    try {
+      // Request permission before opening camera
+      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+      
+      if (!cameraPermission.granted) {
+        Alert.alert(
+          'Permission Denied', 
+          'Allow access to camera to record videos.'
+        );
+        return;
+      }
+
+      // Check if location services are enabled first
+      const locationServicesEnabled = await checkLocationServices();
+      if (!locationServicesEnabled) {
+        Alert.alert(
+          'Location Warning',
+          'Location services are disabled. Your video will not be geo-tagged with the exact location.',
+          [
+            { 
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Continue Anyway',
+              onPress: () => launchVideoRecorder()
+            }
+          ]
+        );
+        return;
+      }
+
+      // Get current precise location first BEFORE starting to record
+      const preciseLoc = await getCurrentLocation();
+      
+      if (!preciseLoc) {
+        Alert.alert(
+          'Precise Location Unavailable',
+          'Unable to get your current precise location. Continue without exact geo-tagging?',
+          [
+            { 
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Continue Anyway',
+              onPress: () => launchVideoRecorder()
+            }
+          ]
+        );
+        return;
+      }
+
+      console.log("Starting video recording with precise location data:", preciseLoc);
+      // Store the location and open the camera
+      setLocation(preciseLoc);
+      launchVideoRecorder(preciseLoc);
+    } catch (error) {
+      console.log('Error initializing video recording:', error);
+      Alert.alert(
+        'Camera Error',
+        'There was a problem accessing the camera. Please check your device settings.'
+      );
+    }
+  };
+  
+  // Launch video recorder using ImagePicker
+  const launchVideoRecorder = async (geoLocation = null) => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: false,
+        quality: 0.5,
+        videoMaxDuration: MAX_VIDEO_DURATION / 1000, // 20 seconds in seconds
+        exif: true,
+      });
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const videoAsset = result.assets[0];
+        console.log('Video recorded:', videoAsset);
+        
+        // Check duration (if available)
+        const duration = videoAsset.duration || 0;
+        
+        // Warn if the video is longer than our limit (shouldn't happen but just in case)
+        if (duration > MAX_VIDEO_DURATION / 1000) {
+          console.log(`Video duration (${duration}s) exceeds limit (${MAX_VIDEO_DURATION / 1000}s).`);
+          Alert.alert(
+            'Video Too Long',
+            `The maximum video length is ${MAX_VIDEO_DURATION / 1000} seconds. Your video will be used but may be trimmed during processing.`
+          );
+        }
+        
+        // Add the video to media files
+        const newVideo = {
+          url: videoAsset.uri,
+          fileType: 'VIDEO',
+          description: '',
+          uploaded_at: new Date(),
+          duration: Math.min(Math.round(duration), MAX_VIDEO_DURATION / 1000), // Ensure we display at most MAX_VIDEO_DURATION
+          geoLocation: geoLocation || location
+        };
+        
+        setMediaFiles(prevFiles => [...prevFiles, newVideo]);
+        
+        // Add to background upload queue
+        addToUploadQueue(newVideo);
+      }
+    } catch (error) {
+      console.log('Error recording video:', error);
+      Alert.alert('Error', 'Failed to record video. Please try again.');
+    }
+  };
+
+  // Background upload functionality
+  const addToUploadQueue = (file) => {
+    console.log("Adding file to upload queue:", file.url.split('/').pop());
+    setUploadQueue(prev => [...prev, file]);
+    
+    // Start background upload if not already running
+    if (!isBackgroundUploading) {
+      processUploadQueue();
+    }
+  };
+
+  const processUploadQueue = async () => {
+    if (uploadQueue.length === 0 || isBackgroundUploading) return;
+    
+    setIsBackgroundUploading(true);
+    console.log(`Starting background upload process for ${uploadQueue.length} files`);
+    
+    while (uploadQueue.length > 0) {
+      const currentFile = uploadQueue[0];
+      console.log(`Processing upload for file: ${currentFile.url.split('/').pop()}`);
+      
+      try {
+        const uploadResult = await uploadFile(currentFile.url);
+        if (uploadResult) {
+          console.log(`Successfully uploaded file in background: ${currentFile.url.split('/').pop()}`);
+          
+          // Update the media files array with the uploaded file URL
+          setMediaFiles(prevFiles => 
+            prevFiles.map(file => 
+              file.url === currentFile.url ? 
+              {
+                ...file, 
+                url: uploadResult.url,
+                geoLocation: uploadResult.geoLocation || file.geoLocation
+              } : 
+              file
+            )
+          );
+        }
+      } catch (error) {
+        console.log(`Background upload failed for file: ${currentFile.url.split('/').pop()}`, error);
+        // We'll remove it from the queue anyway to avoid infinite loops
+      }
+      
+      // Remove the processed file from the queue
+      setUploadQueue(prev => prev.filter((_, index) => index !== 0));
+    }
+    
+    setIsBackgroundUploading(false);
+    console.log("Background upload process completed");
   };
 
   // Modify handleUploadAttachments to check location services
@@ -1308,6 +1482,13 @@ export default function SurveyFormScreen() {
                   <Ionicons name="camera" size={18} color="#fff" />
                   <Text style={styles.attachmentButtonText}>Camera</Text>
                 </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.attachmentButton, styles.videoButton]} 
+                  onPress={handleRecordVideo}
+                >
+                  <Ionicons name="videocam" size={18} color="#fff" />
+                  <Text style={styles.attachmentButtonText}>Video</Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -1356,6 +1537,38 @@ export default function SurveyFormScreen() {
                             }
                           }}
                         />
+                        <View style={styles.imageOverlay}>
+                          <View style={styles.imageStatusContainer}>
+                            <Text style={styles.imageStatus}>
+                              {file.url.startsWith('http') ? '✓ Uploaded' : 'Pending Upload'}
+                            </Text>
+                            {file.geoLocation ? (
+                              <View style={styles.geoTagIndicator}>
+                                <Ionicons name="location" size={12} color="#fff" />
+                                <Text style={styles.geoTagText}>Geo-tagged</Text>
+                              </View>
+                            ) : (
+                              <Text style={styles.noGeoTagText}>No Location</Text>
+                            )}
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    ) : file.fileType === 'VIDEO' ? (
+                      <TouchableOpacity 
+                        style={styles.imageContainer}
+                        onPress={() => {
+                          setSelectedAttachmentIndex(idx);
+                          setIsAttachmentViewerVisible(true);
+                        }}
+                      >
+                        <View style={[styles.attachment, styles.videoContainer]}>
+                          <Ionicons name="videocam" size={40} color="#fff" />
+                          {file.duration && (
+                            <Text style={styles.videoDuration}>
+                              {file.duration}s
+                            </Text>
+                          )}
+                        </View>
                         <View style={styles.imageOverlay}>
                           <View style={styles.imageStatusContainer}>
                             <Text style={styles.imageStatus}>
@@ -1750,5 +1963,22 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 4,
     paddingVertical: 2,
+  },
+  videoContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoDuration: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    color: '#fff',
+    fontSize: 12,
+    padding: 4,
+    borderRadius: 4,
+  },
+  videoButton: {
+    backgroundColor: '#e91e63',
   },
 });
