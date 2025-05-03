@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert, SafeAreaView, ActivityIndicator, Platform, FlatList, RefreshControl, StatusBar, Modal, PanResponder, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, Dimensions, Alert, SafeAreaView, ActivityIndicator, Platform, FlatList, RefreshControl, StatusBar, Modal, PanResponder, Animated } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { useCurrentUser } from "../hooks/useCurrentUser";
@@ -7,29 +7,29 @@ import { LOCATION_URL, SURVEY_URL, AUTH_URL } from "../api-url";
 import SafeMapView from '../components/SafeMapView';
 import { Marker, Polyline } from 'react-native-maps';
 import axios from 'axios';
-import Constants from 'expo-constants';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { MaterialIcons } from '@expo/vector-icons';
+import styles from '../styles/locationDetailsStyles';
 
 // Google Maps API keys for different platforms
 const GOOGLE_MAPS_API_KEYS = {
-  ios: 'AIzaSyC2pds2TL5_lGUM-7Y1CFiGq8Wrn0oULr0', // Replace with your iOS API key
-  android: 'AIzaSyC2pds2TL5_lGUM-7Y1CFiGq8Wrn0oULr0', // Replace with your Android API key
+  ios: 'AIzaSyC2pds2TL5_lGUM-7Y1CFiGq8Wrn0oULr0',
+  android: 'AIzaSyC2pds2TL5_lGUM-7Y1CFiGq8Wrn0oULr0',
 };
+
+const { height } = Dimensions.get('window');
 
 export default function LocationDetailsScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const locationId = route.params?.location?._id;
   const newSurvey = route.params?.newSurvey;
-  console.log("Route params", route.params);
   const { currentUser } = useCurrentUser();
   const mapRef = useRef(null);
   
   // Check if user is a supervisor
   const isSupervisor = currentUser?.role === 'SUPERVISOR';
-  console.log("Current user role:", currentUser?.role, "Is supervisor:", isSupervisor);
   
   // Get the appropriate API key based on platform
   const getGoogleMapsApiKey = () => {
@@ -53,7 +53,7 @@ export default function LocationDetailsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // New state variables for assignment modal
+  // Assignment modal state
   const [assignmentModalVisible, setAssignmentModalVisible] = useState(false);
   const [dueDate, setDueDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -61,16 +61,16 @@ export default function LocationDetailsScreen() {
   const [surveyors, setSurveyors] = useState([]);
   const [loadingSurveyors, setLoadingSurveyors] = useState(false);
   
-  // New state variables for reportees
+  // Reportees state
   const [reportees, setReportees] = useState([]);
   const [selectedReportee, setSelectedReportee] = useState(null);
   const [loadingReportees, setLoadingReportees] = useState(false);
   
-  // Track whether the submit button is visible for debugging
+  // Button visibility state
   const [buttonVisible, setButtonVisible] = useState(true);
   
-  // New state for resizable containers with animated values
-  const [mapHeight, setMapHeight] = useState(height * 0.4); // Default map height - 40% of screen
+  // Resizable containers with animated values
+  const [mapHeight, setMapHeight] = useState(height * 0.4);
   const animatedMapHeight = useRef(new Animated.Value(height * 0.4)).current;
   const [dragging, setDragging] = useState(false);
   const animatedHandleOpacity = useRef(new Animated.Value(1)).current;
@@ -125,28 +125,23 @@ export default function LocationDetailsScreen() {
   
   // Fetch location data
   const fetchLocationData = useCallback(async () => {
-    console.log("LocationDetailsScreen: fetching data for ID:", locationId);
-
     // Request location permissions regardless of locationId
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        console.log("Location permission denied");
         Alert.alert("Permission Denied", "Location permission is required to show your current position on the map.");
       }
     } catch (error) {
-      console.error("Error requesting location permission:", error);
+      Alert.alert("Error", "Failed to request location permissions.");
     }
 
     if (!locationId) {
-      console.log("LocationDetailsScreen: No locationId provided");
       // Default to user's current location if no ID provided
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
           const location = await Location.getCurrentPositionAsync({});
           const { latitude, longitude } = location.coords;
-          console.log("LocationDetailsScreen: Using current location:", latitude, longitude);
           
           setMapRegion({
             latitude,
@@ -156,24 +151,20 @@ export default function LocationDetailsScreen() {
           });
         }
       } catch (error) {
-        console.error("Error getting current location:", error);
+        Alert.alert("Error", "Failed to get current location.");
       }
       setIsLoading(false);
       return;
     }
     
     try {
-      console.log("LocationDetailsScreen: Fetching from API:", `${LOCATION_URL}/api/locations/${locationId}`);
       const response = await axios.get(`${LOCATION_URL}/api/locations/${locationId}`);
-      console.log("LocationDetailsScreen: API response received");
       
       if (response.data && response.data.success) {
         const data = response.data.data;
-        console.log("LocationDetailsScreen: Location data received:", JSON.stringify(data, null, 2));
         setLocationData(data);
         
         if (!data.route || data.route.length === 0) {
-          console.warn("LocationDetailsScreen: No route data found in API response");
           setMapError("No route data available for this location");
           setIsLoading(false);
           return;
@@ -196,19 +187,11 @@ export default function LocationDetailsScreen() {
                 description: waypoint.type || '',
                 id: `waypoint-${index}`
               });
-              console.log(`Point ${index}:`, latitude, longitude);
-            } else {
-              console.warn(`Invalid coordinates at index ${index}:`, waypoint);
             }
-          } else {
-            console.warn(`Missing latitude/longitude at index ${index}:`, waypoint);
           }
         });
         
-        console.log("LocationDetailsScreen: Extracted route points:", routePoints.length);
-        
         if (routePoints.length === 0) {
-          console.warn("LocationDetailsScreen: No valid coordinates found in route data");
           setMapError("Invalid coordinates in route data");
           
           // Set default region as fallback
@@ -233,18 +216,15 @@ export default function LocationDetailsScreen() {
           latitudeDelta: 0.05,
           longitudeDelta: 0.05,
         };
-        console.log("LocationDetailsScreen: Setting map region:", initialRegion);
         setMapRegion(initialRegion);
         
         // Calculate optimal walking route
         calculateWalkingDirections(routePoints);
       } else {
-        console.warn("API returned success=false:", response.data);
         setMapError("API returned an unsuccessful response");
         setIsLoading(false);
       }
     } catch (error) {
-      console.error('Error fetching location data:', error);
       setMapError(`Failed to fetch location data: ${error.message}`);
       Alert.alert('Error', 'Failed to fetch location data');
       
@@ -265,20 +245,17 @@ export default function LocationDetailsScreen() {
     
     try {
       setSurveysLoading(true);
-      console.log(`Fetching surveys for location ${locationId}`, "URL :", `${SURVEY_URL}/api/surveys?location=${locationId}`);
-      
       const response = await fetch(`${SURVEY_URL}/api/surveys?location=${locationId}`);
       
       if (!response.ok) {
-        console.error(`Error fetching surveys: ${response.status}`);
+        Alert.alert('Error', `Failed to fetch surveys: ${response.status}`);
         return;
       }
       
       const data = await response.json();
-      console.log(`Found ${data.data?.length || 0} surveys for this location`);
       setSurveys(data.data || []);
     } catch (error) {
-      console.error('Error fetching surveys:', error);
+      Alert.alert('Error', 'Failed to fetch surveys');
     } finally {
       setSurveysLoading(false);
       setRefreshing(false); // End refreshing state
@@ -287,7 +264,6 @@ export default function LocationDetailsScreen() {
 
   // Handle pull-to-refresh
   const onRefresh = useCallback(() => {
-    console.log('Pull-to-refresh triggered');
     setRefreshing(true);
     fetchSurveysForLocation();
   }, [fetchSurveysForLocation]);
@@ -295,7 +271,6 @@ export default function LocationDetailsScreen() {
   // Update data when screen is focused and when a new survey is added
   useFocusEffect(
     useCallback(() => {
-      console.log("Screen focused, refreshing data");
       setIsLoading(true);
       fetchLocationData();
       fetchSurveysForLocation();
@@ -305,19 +280,15 @@ export default function LocationDetailsScreen() {
   // This useEffect handles updating when newSurvey is passed in params
   useEffect(() => {
     if (newSurvey) {
-      console.log('New survey added, refreshing survey list:', newSurvey);
-      
       // If we already have this survey in the list, update it
       // Otherwise, add it to the beginning of the list
       const existingSurveyIndex = surveys.findIndex(s => s._id === newSurvey._id);
       
       if (existingSurveyIndex >= 0) {
-        console.log('Updating existing survey in list');
         const updatedSurveys = [...surveys];
         updatedSurveys[existingSurveyIndex] = newSurvey;
         setSurveys(updatedSurveys);
       } else {
-        console.log('Adding new survey to list');
         setSurveys(prevSurveys => [newSurvey, ...prevSurveys]);
       }
       
@@ -329,9 +300,7 @@ export default function LocationDetailsScreen() {
   // Calculate walking directions
   const calculateWalkingDirections = async (routePoints) => {
     try {
-      console.log("LocationDetailsScreen: Calculating walking directions");
       if (!routePoints || routePoints.length < 2) {
-        console.warn("Not enough points to calculate directions");
         setDirectionsError(true);
         setIsLoading(false);
         return;
@@ -339,7 +308,6 @@ export default function LocationDetailsScreen() {
       
       // Get the appropriate API key
       const apiKey = getGoogleMapsApiKey();
-      console.log(`LocationDetailsScreen: Using ${Platform.OS} API key`);
       
       // Set initial walking directions with direct paths (fallback)
       const directPaths = [];
@@ -373,13 +341,11 @@ export default function LocationDetailsScreen() {
         
         const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}${waypointsStr}&mode=walking&key=${apiKey}`;
         
-        console.log("LocationDetailsScreen: Fetching optimized route with waypoints");
         const response = await axios.get(url);
         
         if (response.data.status === 'OK' && response.data.routes.length > 0) {
           // Get waypoint order from response (Google's optimization)
           const waypointOrder = response.data.routes[0].waypoint_order || [];
-          console.log("Optimized waypoint order:", waypointOrder);
           
           // Create a new ordered array of points based on Google's optimization
           let optimizedPoints = [routePoints[0]]; // Start with origin
@@ -413,7 +379,6 @@ export default function LocationDetailsScreen() {
           
           setRouteDistance(totalDistance);
           setRouteDuration(totalDuration);
-          console.log(`Total route: ${totalDistance}m, ${totalDuration}s`);
           
           // Extract all legs from the route
           let allPathPoints = [];
@@ -431,18 +396,14 @@ export default function LocationDetailsScreen() {
           // If no points were extracted from steps, try to use the overview_polyline
           if (allPathPoints.length === 0 && response.data.routes[0].overview_polyline && response.data.routes[0].overview_polyline.points) {
             allPathPoints = decodePolyline(response.data.routes[0].overview_polyline.points);
-            console.log(`Using overview_polyline with ${allPathPoints.length} points`);
           }
           
           if (allPathPoints.length > 0) {
             setWalkingDirections(allPathPoints);
-            console.log(`Got ${allPathPoints.length} points for complete route`);
           } else {
-            console.warn("No path points extracted from the response");
             setDirectionsError(true);
           }
         } else {
-          console.warn("Failed to get optimized directions:", response.data.status);
           setDirectionsError(true);
           
           // Fallback to our own TSP optimization if Google API fails
@@ -451,7 +412,6 @@ export default function LocationDetailsScreen() {
           setRouteCoordinates(optimizedRoutePoints);
         }
       } catch (error) {
-        console.error("Error fetching optimized directions:", error);
         setDirectionsError(true);
         
         // Fallback to our own TSP optimization
@@ -460,7 +420,6 @@ export default function LocationDetailsScreen() {
         setRouteCoordinates(optimizedRoutePoints);
       }
     } catch (error) {
-      console.error('Error calculating walking directions:', error);
       setDirectionsError(true);
       setIsLoading(false);
     }
@@ -579,7 +538,6 @@ export default function LocationDetailsScreen() {
       }
     }
     
-    console.log(`2-opt completed after ${iterations} iterations`);
     return bestTour;
   };
   
@@ -687,8 +645,6 @@ export default function LocationDetailsScreen() {
         longitude: location.coords.longitude
       };
       
-      console.log('Using current location for survey:', currentLocation);
-      
       // Navigate directly to SurveyForm with the current location
       navigation.navigate('SurveyForm', {
         location: currentLocation,
@@ -696,7 +652,6 @@ export default function LocationDetailsScreen() {
         isViewOnly: false // Surveyors can edit
       });
     } catch (error) {
-      console.error('Error getting current location:', error);
       Alert.alert('Error', 'Failed to get your current location. Please try again.');
     } finally {
       setIsLoading(false);
@@ -711,11 +666,9 @@ export default function LocationDetailsScreen() {
   
   const fitAllPoints = () => {
     if (!mapRef.current) {
-      console.log("Cannot fit to points - map ref is null");
       return;
     }
     
-    console.log("Fitting map to show all points");
     try {
       // Collect all coordinates to include in the fit
       const allPoints = [];
@@ -748,11 +701,8 @@ export default function LocationDetailsScreen() {
       }
       
       if (allPoints.length === 0) {
-        console.log("No points to fit to");
         return;
       }
-      
-      console.log(`Fitting map to ${allPoints.length} points`);
       
       // Use the map's fitToCoordinates method to adjust the visible region
       mapRef.current.fitToCoordinates(allPoints, {
@@ -765,7 +715,6 @@ export default function LocationDetailsScreen() {
         animated: true
       });
     } catch (error) {
-      console.error("Error fitting to coordinates:", error);
       Alert.alert("Map Error", "Unable to adjust map view. Please try again.");
     }
   };
@@ -824,11 +773,9 @@ export default function LocationDetailsScreen() {
                 setSurveys(prevSurveys => prevSurveys.filter(survey => survey._id !== surveyId));
                 Alert.alert('Success', 'Survey deleted successfully');
               } else {
-                console.error('API returned unsuccessful response:', response.data);
                 Alert.alert('Error', 'Failed to delete survey');
               }
             } catch (error) {
-              console.error('Error deleting survey:', error);
               Alert.alert('Error', `Failed to delete survey: ${error.message}`);
             }
           },
@@ -885,21 +832,18 @@ export default function LocationDetailsScreen() {
     
     try {
       setLoadingSurveyors(true);
-      console.log("Fetching surveyors reporting to current user");
       
       // Use the endpoint to get surveyors reporting to the current user
       const apiUrl = `${AUTH_URL}/api/auth/users?reportingTo=${currentUser?._id}`;
-      console.log("Fetching surveyors from:", apiUrl);
       
       const response = await fetch(apiUrl);
       
       if (!response.ok) {
-        console.error(`Error fetching surveyors: ${response.status}`);
+        Alert.alert('Error', `Failed to fetch surveyors: ${response.status}`);
         return;
       }
       
       const data = await response.json();
-      console.log(`Found ${data.data?.length || 0} surveyors`);
       
       if (Array.isArray(data.data)) {
         // Filter only active surveyors with SURVEYOR role
@@ -916,7 +860,6 @@ export default function LocationDetailsScreen() {
         }
       }
     } catch (error) {
-      console.error('Error fetching surveyors:', error);
       Alert.alert('Error', 'Failed to fetch surveyors');
     } finally {
       setLoadingSurveyors(false);
@@ -976,23 +919,18 @@ export default function LocationDetailsScreen() {
             try {
               setIsSubmitting(true);
               
+              // Prepare the payload
+              const payload = {
+                surveyor: selectedSurveyor,
+                assigned_to: selectedSurveyor,
+                reportee: selectedReportee,
+                supervisor: currentUser?._id,
+                due_date: formattedDueDate,
+                status: 2 // Mark as assigned
+              };
+              
               // Make API call to update location
-              console.log("Assign Location Payload :", {
-                surveyor: selectedSurveyor,
-                assigned_to: selectedSurveyor,
-                reportee: selectedReportee,
-                supervisor: currentUser?._id,
-                due_date: formattedDueDate,
-                status: 2 // Mark as assigned
-              })
-              const response = await axios.put(`${LOCATION_URL}/api/locations/${locationId}`, {
-                surveyor: selectedSurveyor,
-                assigned_to: selectedSurveyor,
-                reportee: selectedReportee,
-                supervisor: currentUser?._id,
-                due_date: formattedDueDate,
-                status: 2 // Mark as assigned
-              });
+              const response = await axios.put(`${LOCATION_URL}/api/locations/${locationId}`, payload);
               
               if (response.data && response.data.success) {
                 Alert.alert('Success', 'Location has been assigned', [
@@ -1002,11 +940,9 @@ export default function LocationDetailsScreen() {
                   }}
                 ]);
               } else {
-                console.error('API returned unsuccessful response:', response.data);
                 Alert.alert('Error', 'Failed to assign location');
               }
             } catch (error) {
-              console.error('Error assigning location:', error);
               Alert.alert('Error', `Failed to assign location: ${error.message}`);
             } finally {
               setIsSubmitting(false);
@@ -1049,11 +985,9 @@ export default function LocationDetailsScreen() {
                 fetchLocationData();
                 fetchSurveysForLocation();
               } else {
-                console.error('API returned unsuccessful response:', response.data);
                 Alert.alert('Error', 'Failed to start survey');
               }
             } catch (error) {
-              console.error('Error starting survey:', error);
               Alert.alert('Error', `Failed to start survey: ${error.message}`);
             } finally {
               setIsSubmitting(false);
@@ -1096,11 +1030,9 @@ export default function LocationDetailsScreen() {
                 fetchLocationData();
                 fetchSurveysForLocation();
               } else {
-                console.error('API returned unsuccessful response:', response.data);
                 Alert.alert('Error', 'Failed to restart survey');
               }
             } catch (error) {
-              console.error('Error restarting survey:', error);
               Alert.alert('Error', `Failed to restart survey: ${error.message}`);
             } finally {
               setIsSubmitting(false);
@@ -1141,11 +1073,9 @@ export default function LocationDetailsScreen() {
                   { text: 'OK', onPress: () => navigation.goBack() }
                 ]);
               } else {
-                console.error('API returned unsuccessful response:', response.data);
                 Alert.alert('Error', 'Failed to approve location');
               }
             } catch (error) {
-              console.error('Error approving location:', error);
               Alert.alert('Error', `Failed to approve location: ${error.message}`);
             } finally {
               setIsSubmitting(false);
@@ -1185,11 +1115,9 @@ export default function LocationDetailsScreen() {
                   { text: 'OK', onPress: () => navigation.goBack() }
                 ]);
               } else {
-                console.error('API returned unsuccessful response:', response.data);
                 Alert.alert('Error', 'Failed to reject location');
               }
             } catch (error) {
-              console.error('Error rejecting location:', error);
               Alert.alert('Error', `Failed to reject location: ${error.message}`);
             } finally {
               setIsSubmitting(false);
@@ -1232,11 +1160,9 @@ export default function LocationDetailsScreen() {
                   { text: 'OK', onPress: () => navigation.goBack() }
                 ]);
               } else {
-                console.error('API returned unsuccessful response:', response.data);
                 Alert.alert('Error', 'Failed to update location status');
               }
             } catch (error) {
-              console.error('Error submitting location:', error);
               Alert.alert('Error', `Failed to update location: ${error.message}`);
             } finally {
               setIsSubmitting(false);
@@ -1246,20 +1172,6 @@ export default function LocationDetailsScreen() {
       ]
     );
   };
-
-  // Add debug logging in useEffect to check roles and component rendering
-  useEffect(() => {
-    console.log("Location Details Screen Mounted");
-    console.log("Current user role:", currentUser?.role);
-    console.log("Is supervisor:", isSupervisor);
-    console.log("Submit button should be visible to all users");
-  }, []);
-
-  useEffect(() => {
-    console.log("Button visibility state:", buttonVisible);
-    // Force the button to be visible in case something is hiding it
-    setButtonVisible(true);
-  }, []);
 
   if (isLoading) {
     return (
@@ -1665,447 +1577,3 @@ export default function LocationDetailsScreen() {
     </View>
   );
 }
-
-const { width, height } = Dimensions.get('window');
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    position: 'relative',
-  },
-  safeArea: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#555',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-  },
-  errorText: {
-    color: 'red',
-    textAlign: 'center',
-    marginHorizontal: 20,
-  },
-  mapContainer: {
-    width: '100%',
-    backgroundColor: '#f0f0f0',
-    borderWidth: 1,
-    borderColor: '#ccc',
-    // height is now dynamic and controlled by state
-  },
-  mapWrapper: {
-    flex: 1,
-    position: 'relative',
-  },
-  map: {
-    width: '100%',
-    height: '100%',
-  },
-  fitButton: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    backgroundColor: 'rgba(33, 150, 243, 0.9)',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 8,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  fitButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  directionsErrorBanner: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(255, 204, 0, 0.9)',
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 8,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  directionsErrorText: {
-    color: '#333',
-    textAlign: 'center',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  surveyListContainer: {
-    flex: 1, // Takes remaining space
-    backgroundColor: '#fff',
-  },
-  surveyListHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    backgroundColor: '#f9f9f9',
-  },
-  surveyListTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  surveyListContent: {
-    paddingHorizontal: 16, 
-    paddingBottom: 120, // Increased padding to ensure last survey is visible above the button
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  emptyText: {
-    color: '#999',
-    fontSize: 16,
-  },
-  surveyItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#f9f9f9',
-    marginTop: 12,
-    marginBottom: 8, // Added margin at the bottom for spacing between items
-    padding: 16,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#2196F3',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  surveyContent: {
-    flex: 1,
-  },
-  surveyTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
-  },
-  surveyDetails: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 2,
-  },
-  surveyDate: {
-    fontSize: 12,
-    color: '#888',
-  },
-  surveyActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  deleteButton: {
-    padding: 8,
-    marginRight: 5,
-  },
-  surveyArrow: {
-    fontSize: 20,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  headerPinButton: {
-    backgroundColor: '#2196F3',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    marginLeft: 8,
-    elevation: 2,
-  },
-  headerPinButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  locationInfo: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    right: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    elevation: 3,
-  },
-  locationTitle: {
-    fontWeight: 'bold',
-    textAlign: 'center',
-    fontSize: 15,
-    color: '#333',
-  },
-  routeStatsContainer: {
-    marginTop: 4,
-    paddingTop: 4,
-    borderTopWidth: 1,
-    borderTopColor: '#ccc',
-  },
-  routeStats: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: '#2196F3',
-    fontWeight: 'bold',
-  },
-  fixedFooter: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#ddd',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    zIndex: 9999,
-  },
-  approvalButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  approveButton: {
-    flex: 1,
-    backgroundColor: '#2196F3',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 2,
-  },
-  approveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  rejectButton: {
-    flex: 1,
-    backgroundColor: '#FF5252',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 2,
-  },
-  rejectButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  submitButton: {
-    backgroundColor: '#2196F3',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 2,
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  restartButton: {
-    backgroundColor: '#2196F3',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 2,
-  },
-  restartButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  startButton: {
-    backgroundColor: '#2196F3',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 2,
-  },
-  startButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  // New styles for the assignment modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContainer: {
-    width: '90%',
-    backgroundColor: 'white',
-    borderRadius: 10,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  inputLabel: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 8,
-  },
-  datePickerButton: {
-    backgroundColor: '#f9f9f9',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  datePickerText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  datePicker: {
-    marginTop: 10,
-    marginBottom: 10,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    backgroundColor: '#f9f9f9',
-    overflow: 'hidden',
-  },
-  picker: {
-    height: 50,
-    width: '100%',
-  },
-  noSurveyorsText: {
-    fontSize: 16,
-    color: '#999',
-    textAlign: 'center',
-    marginTop: 10,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  cancelButton: {
-    flex: 1,
-    backgroundColor: '#f2f2f2',
-    padding: 15,
-    borderRadius: 8,
-    marginRight: 10,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: '#666',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  assignButton: {
-    flex: 1,
-    backgroundColor: '#2196F3',
-    padding: 15,
-    borderRadius: 8,
-    marginLeft: 10,
-    alignItems: 'center',
-    elevation: 2,
-  },
-  assignButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  assignLocationButton: {
-    backgroundColor: '#2196F3',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 2,
-  },
-  assignLocationButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  // Updated styles for resize handle
-  resizeHandle: {
-    width: '100%',
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
-    zIndex: 10,
-  },
-  handleBar: {
-    width: 50,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#aaa',
-  },
-  dragHintText: {
-    fontSize: 10,
-    color: '#999',
-    marginTop: 3,
-  },
-});
